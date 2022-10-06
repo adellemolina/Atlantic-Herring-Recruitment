@@ -1,0 +1,272 @@
+---
+title: "Preliminary Results"
+author: "Adelle Molina"
+format: html
+editor: visual
+---
+
+# Boosted Regression Trees for herring recruitment
+
+Code for getting data, generating time series of possible predictors, plotting recruitment and predictor time series, producing correlation matrices to reduce the possible predictor list, and running boosted regression trees (preliminary results).
+
+## Load packages
+
+```{r}
+#| label: load-packages
+#| include: false
+
+library(dplyr)
+library(ggplot2)
+library(corrplot)
+library(reshape2)
+library(ggstatsplot)
+library(gbm)
+library(tidyr)
+library(dismo)
+```
+
+## Load data
+
+The combined dataset being loaded in here came from various sources (mostly NOAA ecodata github) and were modified, summarized, compiled and exported in a separate script.
+
+-   SST & BT raw data came from the NMFS survey and were clipped to EPU regions
+    -   Annual survey derived SST and BT were area weighted
+-   Annual and/or regional environmental indices came from ecodata
+    1.  Heatwave index (missing some years)
+
+    2.  Cold Pool index
+
+    3.  Gulf Stream Index
+-   Various zooplankton indices include abundance, density, and copepod abundance
+-   Recruitment indices came from 2022 ASAP model
+-   Other indices, such as salinity and chlorophyll might require a separate analysis b/c time series are shorter, but they are included in preliminary runs here
+
+```{r}
+#| label: Load data
+#| include: false
+#| echo: false
+
+# Load in the biological and physical variables 
+ts.vars <- read.csv(file = 'Data/variables.csv', header=T)
+
+# Load the herring data
+ts.recr <- read.csv(file='Data/ASAPdat.csv', header=T)
+
+# Combine
+dat <- merge(ts.recr, ts.vars,by = "year")
+```
+
+## Preliminary plots
+
+Plot time series of possible variables and correlation matrices.
+
+```{r}
+#| label: Plot environmental data
+#| include: false
+#| echo: false
+
+# Temperature
+temp.dat <- dat%>% 
+  dplyr::select(year, c(names(dat)[9:25]),SPR, logR.dev, Rs, SSB)
+temps.melt <- reshape2::melt(temp.dat, id.vars="year", variable.name="series")
+
+ggplot(temps.melt, aes(year,value)) +
+  geom_line()+ 
+  theme_bw()+
+  facet_wrap(~ series, scales = "free", ncol=4)
+
+ggstatsplot::ggcorrmat(
+  data = temp.dat,
+  type = "nonparametric", 
+  colors = c("darkred", "white", "steelblue"))
+
+
+```
+
+### Trends in recruitment variables:
+
+| **Spawner per recruit vector**: Was high in the 70s-early 80s, declined sharply from 1980-2000 and has since been low. This means that the proportion of fish that reach maturity has declined (sig correlation with year and GB BT)
+| 
+
+**log recruitment deviations:** Lots of interannual variability, but was generally hovering around zero, since 2010 has been lower than time series average (no sig correlations) \| **Spawning success (Recruits(t)/SSB(t-1):** increased throughout the 80s and 90s, declined in 1990 to intermediate levels, then declined sharply after 2010 to 2018 and has since risen (Only significantly correlated with year) \| **SSB**: Trimmed data misses high biomass in 70s before decline, from lows in 80s, increase into the 2000s, then steady decline to 2010 and since relatively low (no sig correlations)
+
+### Patterns and correlations in environmental variables:
+
+-   OISST in each region is similar to the basin scale annual OISST; these were all highly correlated (drop regionals)
+
+-   OISST and survey derived SST have different patterns; not significantly correlated (keep both)
+
+-   Bottom temp and SST patterns are different, but they are correlated (keep both)
+
+-   Bottom and surface salinity are significantly correlated and patterns are broadly similar (just keep bottom)
+
+-   Distinct regional patterns in SST and BT that also differ from the basin wide annual averages
+
+    -   Although annual SST is correlated to the regional values, because MAB area is largest and it's a weighted average, this correlation is strongest (keep regionals)
+
+    -   Bottom temperature is not significantly correlated to all the regional bottom temps (keep regionals)
+
+```{r}
+#| label: Plot environmental indices
+#| include: false
+#| echo: false
+
+# Environmental Indices
+env.dat<- dat%>% 
+  dplyr::select(year, c(names(dat)[26:31]),SPR, logR.dev, Rs, SSB)
+env.melt <- reshape2::melt(env.dat, id.vars="year", variable.name="series")
+ggplot(env.melt, aes(year,value)) +
+  geom_line()+ 
+  theme_bw()+
+  facet_wrap(~ series, scales = "free", ncol=4)
+ggstatsplot::ggcorrmat(
+  data = env.dat,
+  type = "nonparametric", 
+  colors = c("darkred", "white", "steelblue"))
+
+
+```
+
+### Patterns in environmental indices:
+
+**HW**: Lots of missing data in heatwave index, generally low in 80s-2000s, sharp increase around 2010 and high but varying intensity in last ten years (significantly correlated with other indices)
+
+-   Regional patterns broadly similar to each other and to annual (all significantly correlated)
+
+**GSI:** Periodic variation from 80s-2000s, increase since 2010
+
+**Cold Pool:** highly variable, more positive years since 2010
+
+### **Correlations with recruitment indices:**
+
+-   Note that all the recruitment indices are correlated to eachother
+
+-   SPR significantly correlated to HW (& GB heatwave)
+
+```{r}
+#| label: Plot biological variables
+#| include: false
+#| #| echo: false
+#| 
+## # Biological 
+bio.dat <- dat%>% 
+  dplyr::select(year,  c(names(dat)[32:46]),SPR, logR.dev, Rs, SSB)
+bio.melt <- reshape2::melt(bio.dat, id.vars="year", variable.name="series")
+ggplot(bio.melt, aes(year,value)) +
+  geom_line()+ 
+  theme_bw()+
+  facet_wrap(~ series, scales = "free", ncol=4)
+ggstatsplot::ggcorrmat(
+  data = bio.dat,
+  type = "nonparametric",
+  colors = c("darkred", "white", "steelblue"))
+```
+
+### Patterns in biological indices:
+
+**Primary Production**: short ts, increasing from 2000-2010, slight decline since then
+
+-   Regional patterns look different from each other and annual (annual sig corr with GOM and GB; just keep annual)
+
+**Zooplankton Abundance:** Regional patterns diffrent from eacother and annual, esp MAB, all characterized by episodic spikes (only sig corr with GOM)
+
+**Zooplankton Density:** Missing several years, different patterns from abundance, was high in early 2000s, rapid decline to low levels through late 2000s, steady increase since 2010
+
+**Copepod Abundance:** Different patterns as total zooplankton abundance
+
+-   Stage 5 patterns similar to the total pattern (CAD diff from CC5 and Cope, but CC5 and Cope very similar; significantly correlated)
+
+-   Regional patterns differ (scotian shelf data missing many years), but GOM looks most similar to the total copepod abundance (GOM sig corr to total copepod abundance)
+
+**GB zooplankton abundance was significantly correlated to recruitment success**
+
+Keep regional calanus abundance and regional zooplankton abundances but drop density
+
+## Add lags
+
+Prepare data for BRTs --\> add lags to the variables and then join back with the herring data
+
+```{r}
+#| label: Add-lags
+#| include: true
+#| echo: false
+
+# remove highly correlated variables 
+ts.vars <- ts.vars%>% 
+  dplyr::select(-ZooDens,-OISST.GB,-OISST.GOM,-OISST.MAB,-OISST.SS,-Surv.SSS, -CAD, -CC5, -cal.SS, -CP, -GSI, -HW.GB, -HW.GOM, -HW.MAB, -PP.GB, -PP.GOM, -PP.MAB,-PP.GOM)
+
+# Create a separate object for each lag (1-3 for now), shift, append lag to column name
+lag1 <-ts.vars 
+lag1$year <- lag1$year+1
+colnames(lag1)[2:ncol(lag1)]<-paste(colnames(ts.vars)[2:ncol(ts.vars)],"_1",sep="")
+lag1<-as.data.frame(lag1)
+lag1<-lag1%>%
+  add_row(year=1982, .before=1)%>%
+  dplyr::filter((year<2019)%>% replace_na(TRUE)) # add na to earlier years and chop off extra years
+lag1<-lag1[,-c(1)] # remove extra year column
+
+lag2 <-ts.vars 
+lag2$year <- lag2$year+2
+colnames(lag2)[2:ncol(lag2)]<-paste(colnames(ts.vars)[2:ncol(ts.vars)],"_2",sep="")
+lag2<-as.data.frame(lag2)
+lag2<-lag2%>%
+  add_row(year=1982, .before=1)%>%
+  add_row(year=1983, .after=1)%>%
+  dplyr::filter((year<2019)%>% replace_na(TRUE)) 
+lag2<-lag2[,-c(1)] 
+
+lag3 <-ts.vars 
+lag3$year <- lag3$year+3
+colnames(lag3)[2:ncol(lag3)]<-paste(colnames(ts.vars)[2:ncol(ts.vars)],"_3",sep="")
+lag3<-as.data.frame(lag3)
+lag3<-lag3%>%
+  add_row(year=1982, .before=1)%>%
+  add_row(year=1983, .after=1)%>%
+  add_row(year=1984, .after=2)%>%
+  dplyr::filter((year<2019)%>% replace_na(TRUE)) 
+lag3<-lag3[,-c(1)] 
+
+# Combine 
+dat2 <- merge(ts.recr, ts.vars,by = "year")
+lagdat <- cbind(dat2,lag1,lag2, lag3)
+brtdat <- data.frame(lagdat)
+
+```
+
+### Run Boosted Regression Trees
+
+```{r}
+#| label: Boosted Regression Trees
+#| include: true
+#| echo: true
+#| 
+ncol(brtdat) # how many columns
+which(colnames(brtdat)=="SPR") # which column is SPR, the dependent variable
+brd.mod <-gbm.step(data=brtdat,
+              gbm.x=c(9:96), # Select all columns after herring r indices
+              gbm.y=7, # Spawner per recruit
+              family="gaussian",
+              tree.complexity=1, # (1 = no interactions)
+              learning.rate=0.01,
+              bag.fraction=0.7)
+summary(brd.mod)
+null.dev<-brd.mod$self.statistics$mean.null
+resid.dev<-brd.mod$cv.statistics$deviance.mean
+dev.expl<-((null.dev-resid.dev)/null.dev)*100
+dev.expl
+
+ggplot(data=summary(brd.mod),aes(x=reorder(var,rel.inf),y=rel.inf))+
+  geom_bar(stat="identity")+
+  labs(x="",y="relative influence")+
+  coord_flip()
+```
+
+-   Not shown here are different runs with just up to 2 year lags, and with no lags
+
+    -   top variables always include food and temp
+
+-   Almost all the top 10 variables include a two year lag and include sst, bt, and abundance of copepods in all or either GB and/or GoM
+
+-   Ran with more data and found that relative influence of top variables changed and instead most top variables have a 3 years lag, but also include sst and copepods
+
+-   Several variables were not important at all

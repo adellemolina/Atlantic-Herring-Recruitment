@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.1.189">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="author" content="Adelle Molina">
+
+<title>Preliminary Results</title>
+<style>
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: min(4vw, 1.5em);}
+div.column{flex: auto; overflow-x: auto;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1.6em;
+  vertical-align: middle;
+}
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+    color: #aaaaaa;
+  }
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+code span.at { color: #7d9029; } /* Attribute */
+code span.bn { color: #40a070; } /* BaseN */
+code span.bu { color: #008000; } /* BuiltIn */
+code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+code span.ch { color: #4070a0; } /* Char */
+code span.cn { color: #880000; } /* Constant */
+code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+code span.dt { color: #902000; } /* DataType */
+code span.dv { color: #40a070; } /* DecVal */
+code span.er { color: #ff0000; font-weight: bold; } /* Error */
+code span.ex { } /* Extension */
+code span.fl { color: #40a070; } /* Float */
+code span.fu { color: #06287e; } /* Function */
+code span.im { color: #008000; font-weight: bold; } /* Import */
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+code span.op { color: #666666; } /* Operator */
+code span.ot { color: #007020; } /* Other */
+code span.pp { color: #bc7a00; } /* Preprocessor */
+code span.sc { color: #4070a0; } /* SpecialChar */
+code span.ss { color: #bb6688; } /* SpecialString */
+code span.st { color: #4070a0; } /* String */
+code span.va { color: #19177c; } /* Variable */
+code span.vs { color: #4070a0; } /* VerbatimString */
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+</style>
+
+
+<script src="Preliminary Results_files/libs/clipboard/clipboard.min.js"></script>
+<script src="Preliminary Results_files/libs/quarto-html/quarto.js"></script>
+<script src="Preliminary Results_files/libs/quarto-html/popper.min.js"></script>
+<script src="Preliminary Results_files/libs/quarto-html/tippy.umd.min.js"></script>
+<script src="Preliminary Results_files/libs/quarto-html/anchor.min.js"></script>
+<link href="Preliminary Results_files/libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="Preliminary Results_files/libs/quarto-html/quarto-syntax-highlighting.css" rel="stylesheet" id="quarto-text-highlighting-styles">
+<script src="Preliminary Results_files/libs/bootstrap/bootstrap.min.js"></script>
+<link href="Preliminary Results_files/libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="Preliminary Results_files/libs/bootstrap/bootstrap.min.css" rel="stylesheet" id="quarto-bootstrap" data-mode="light">
+
+
+</head>
+
+<body class="fullcontent">
+
+<div id="quarto-content" class="page-columns page-rows-contents page-layout-article">
+
+<main class="content" id="quarto-document-content">
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Preliminary Results</h1>
+</div>
+
+
+
+<div class="quarto-title-meta">
+
+    <div>
+    <div class="quarto-title-meta-heading">Author</div>
+    <div class="quarto-title-meta-contents">
+             <p>Adelle Molina </p>
+          </div>
+  </div>
+    
+    
+  </div>
+  
+
+</header>
+
+<section id="boosted-regression-trees-for-herring-recruitment" class="level2">
+<h2 class="anchored" data-anchor-id="boosted-regression-trees-for-herring-recruitment">Boosted Regression Trees for herring recruitment</h2>
+<p>Code for getting data, generating time series of possible variables, correlation matrices, and boosted regression trees (preliminary results)</p>
+<section id="load-packages" class="level3">
+<h3 class="anchored" data-anchor-id="load-packages">Load packages</h3>
+</section>
+<section id="load-data" class="level3">
+<h3 class="anchored" data-anchor-id="load-data">Load data</h3>
+<p>Data came from various sources (mostly ecodata github) and were modified, summarized, compiled and exported in a separate script.</p>
+<ul>
+<li>SST &amp; BT raw data came from the NMFS survey and were clipped to EPU regions
+<ul>
+<li>Annual survey derived SST and BT were area weighted</li>
+</ul></li>
+<li>Annual and/or regional environmental indices came from ecodata
+<ol type="1">
+<li><p>heatwave</p></li>
+<li><p>cold pool</p></li>
+<li><p>gulf stream index</p></li>
+</ol></li>
+<li>Various zooplankton indices came ecodata and include abundance, density, and copepod abundance</li>
+<li>Recruitment indices came from ASAP model run</li>
+<li>Other indices, such as salinity and chlorophyll would require a separate analysis b/c time series are shorter</li>
+</ul>
+</section>
+<section id="preliminary-plots" class="level3">
+<h3 class="anchored" data-anchor-id="preliminary-plots">Preliminary plots</h3>
+<p>Plot time series of possible variables and correlation matrices.</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb1"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Temperature</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>temp.dat <span class="ot">&lt;-</span> dat<span class="sc">%&gt;%</span> </span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>  dplyr<span class="sc">::</span><span class="fu">select</span>(year, <span class="fu">c</span>(<span class="fu">names</span>(dat)[<span class="dv">9</span><span class="sc">:</span><span class="dv">23</span>]),SPR, logR.dev, Rs)</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a>temps.melt <span class="ot">&lt;-</span> reshape2<span class="sc">::</span><span class="fu">melt</span>(temp.dat, <span class="at">id.vars=</span><span class="st">"year"</span>, <span class="at">variable.name=</span><span class="st">"series"</span>)</span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(temps.melt, <span class="fu">aes</span>(year,value)) <span class="sc">+</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_line</span>()<span class="sc">+</span> </span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme_bw</span>()<span class="sc">+</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>  <span class="fu">facet_wrap</span>(<span class="sc">~</span> series, <span class="at">scales =</span> <span class="st">"free"</span>, <span class="at">ncol=</span><span class="dv">4</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<p><img src="Preliminary-Results_files/figure-html/Plot-data-1.png" class="img-fluid" width="672"></p>
+</div>
+<div class="sourceCode cell-code" id="cb2"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>ggstatsplot<span class="sc">::</span><span class="fu">ggcorrmat</span>(</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">data =</span> temp.dat,</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">type =</span> <span class="st">"nonparametric"</span>, </span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">colors =</span> <span class="fu">c</span>(<span class="st">"darkred"</span>, <span class="st">"white"</span>, <span class="st">"steelblue"</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<p><img src="Preliminary-Results_files/figure-html/Plot-data-2.png" class="img-fluid" width="672"></p>
+</div>
+<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co"># Environmental Indices</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>env.dat<span class="ot">&lt;-</span> dat<span class="sc">%&gt;%</span> </span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>  dplyr<span class="sc">::</span><span class="fu">select</span>(year, <span class="fu">c</span>(<span class="fu">names</span>(dat)[<span class="dv">23</span><span class="sc">:</span><span class="dv">28</span>]),SPR, logR.dev, Rs)</span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a>env.melt <span class="ot">&lt;-</span> reshape2<span class="sc">::</span><span class="fu">melt</span>(env.dat, <span class="at">id.vars=</span><span class="st">"year"</span>, <span class="at">variable.name=</span><span class="st">"series"</span>)</span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(env.melt, <span class="fu">aes</span>(year,value)) <span class="sc">+</span></span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_line</span>()<span class="sc">+</span> </span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme_bw</span>()<span class="sc">+</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">facet_wrap</span>(<span class="sc">~</span> series, <span class="at">scales =</span> <span class="st">"free"</span>, <span class="at">ncol=</span><span class="dv">4</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<p><img src="Preliminary-Results_files/figure-html/Plot-data-3.png" class="img-fluid" width="672"></p>
+</div>
+<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>ggstatsplot<span class="sc">::</span><span class="fu">ggcorrmat</span>(</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">data =</span> env.dat,</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">type =</span> <span class="st">"nonparametric"</span>, </span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">colors =</span> <span class="fu">c</span>(<span class="st">"darkred"</span>, <span class="st">"white"</span>, <span class="st">"steelblue"</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<p><img src="Preliminary-Results_files/figure-html/Plot-data-4.png" class="img-fluid" width="672"></p>
+</div>
+<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a><span class="do">## # Biological </span></span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>bio.dat <span class="ot">&lt;-</span> dat<span class="sc">%&gt;%</span> </span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>  dplyr<span class="sc">::</span><span class="fu">select</span>(year,  <span class="fu">c</span>(<span class="fu">names</span>(dat)[<span class="dv">29</span><span class="sc">:</span><span class="dv">39</span>]),SPR, logR.dev, Rs)</span>
+<span id="cb5-4"><a href="#cb5-4" aria-hidden="true" tabindex="-1"></a>bio.melt <span class="ot">&lt;-</span> reshape2<span class="sc">::</span><span class="fu">melt</span>(bio.dat, <span class="at">id.vars=</span><span class="st">"year"</span>, <span class="at">variable.name=</span><span class="st">"series"</span>)</span>
+<span id="cb5-5"><a href="#cb5-5" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(bio.melt, <span class="fu">aes</span>(year,value)) <span class="sc">+</span></span>
+<span id="cb5-6"><a href="#cb5-6" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_line</span>()<span class="sc">+</span> </span>
+<span id="cb5-7"><a href="#cb5-7" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme_bw</span>()<span class="sc">+</span></span>
+<span id="cb5-8"><a href="#cb5-8" aria-hidden="true" tabindex="-1"></a>  <span class="fu">facet_wrap</span>(<span class="sc">~</span> series, <span class="at">scales =</span> <span class="st">"free"</span>, <span class="at">ncol=</span><span class="dv">4</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<p><img src="Preliminary-Results_files/figure-html/Plot-data-5.png" class="img-fluid" width="672"></p>
+</div>
+<div class="sourceCode cell-code" id="cb6"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>ggstatsplot<span class="sc">::</span><span class="fu">ggcorrmat</span>(</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">data =</span> bio.dat,</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">type =</span> <span class="st">"nonparametric"</span>,</span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">colors =</span> <span class="fu">c</span>(<span class="st">"darkred"</span>, <span class="st">"white"</span>, <span class="st">"steelblue"</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<p><img src="Preliminary-Results_files/figure-html/Plot-data-6.png" class="img-fluid" width="672"></p>
+</div>
+</div>
+<p>Most significant correlations are between spawner per recruit and GOM and/or GB temperature (SST, HW, BT). No significant correlations with biological indices.</p>
+</section>
+<section id="add-lags" class="level3">
+<h3 class="anchored" data-anchor-id="add-lags">Add lags</h3>
+<p>Prepare data for BRTs –&gt; add lags to the variables and then join back with the herring data</p>
+<div class="cell">
+
+</div>
+</section>
+<section id="run-boosted-regression-trees" class="level3">
+<h3 class="anchored" data-anchor-id="run-boosted-regression-trees">Run Boosted Regression Trees</h3>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a><span class="fu">ncol</span>(brtdat) <span class="co"># how many columns</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>[1] 96</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb9"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a><span class="fu">which</span>(<span class="fu">colnames</span>(brtdat)<span class="sc">==</span><span class="st">"SPR"</span>) <span class="co"># which column is SPR, the dependent variable</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>[1] 7</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb11"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a>brd.mod <span class="ot">&lt;-</span><span class="fu">gbm.step</span>(<span class="at">data=</span>brtdat,</span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a>              <span class="at">gbm.x=</span><span class="fu">c</span>(<span class="dv">9</span><span class="sc">:</span><span class="dv">96</span>), <span class="co"># Select all columns after herring r indices</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a>              <span class="at">gbm.y=</span><span class="dv">7</span>, <span class="co"># Spawner per recruit</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a>              <span class="at">family=</span><span class="st">"gaussian"</span>,</span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a>              <span class="at">tree.complexity=</span><span class="dv">1</span>, <span class="co"># (1 = no interactions)</span></span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a>              <span class="at">learning.rate=</span><span class="fl">0.01</span>,</span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a>              <span class="at">bag.fraction=</span><span class="fl">0.7</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+ 
+ GBM STEP - version 2.9 
+ 
+Performing cross-validation optimisation of a boosted regression tree model 
+for SPR and using a family of gaussian 
+Using 37 observations and 88 predictors 
+creating 10 initial models of 50 trees 
+
+ folds are unstratified 
+total mean deviance =  0.0014 
+tolerance is fixed at  0 
+ntrees resid. dev. 
+50    0.0013 
+now adding trees... 
+100   0.0013 
+150   0.0013 
+200   0.0013 
+250   0.0012 
+300   0.0012 
+350   0.0012 
+400   0.0012 
+450   0.0012 
+500   0.0012 
+550   0.0012 
+600   0.0012 
+650   0.0012 
+700   0.0012 
+750   0.0012 
+800   0.0012 
+850   0.0012 
+900   0.0012 
+950   0.0012 
+1000   0.0012 
+1050   0.0012 
+1100   0.0012 
+1150   0.0012 
+1200   0.0012 
+1250   0.0012 
+1300   0.0012 
+1350   0.0012 
+1400   0.0012 
+1450   0.0012 
+1500   0.0012 </code></pre>
+</div>
+<div class="cell-output cell-output-stderr">
+<pre><code>fitting final gbm model with a fixed number of 900 trees for SPR</code></pre>
+</div>
+<div class="cell-output-display">
+<p><img src="Preliminary-Results_files/figure-html/Boosted%20Regression%20Trees-1.png" class="img-fluid" width="672"></p>
+</div>
+<div class="cell-output cell-output-stdout">
+<pre><code>
+mean total deviance = 0.001 
+mean residual deviance = 0.001 
+ 
+estimated cv deviance = 0.001 ; se = 0 
+ 
+training data correlation = 0.686 
+cv correlation =  0.526 ; se = 0.152 
+ 
+elapsed time -  0.03 minutes </code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb15"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>(brd.mod)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>                  var     rel.inf
+Num.MAB_3   Num.MAB_3 9.467070121
+Num.GB_2     Num.GB_2 7.262040493
+BT.GOM_3     BT.GOM_3 7.226671152
+Num.GOM_3   Num.GOM_3 7.226492600
+Num.GB_3     Num.GB_3 6.924649853
+Surv.BT_3   Surv.BT_3 5.876819761
+Abund_3       Abund_3 5.437975715
+SST.MAB_3   SST.MAB_3 4.805903921
+SST.SS_3     SST.SS_3 4.798046873
+OISST_3       OISST_3 4.719570324
+SST.GOM_3   SST.GOM_3 4.417013747
+Surv.SST_3 Surv.SST_3 4.149073260
+BT.SS_3       BT.SS_3 4.018713929
+SST.GB_3     SST.GB_3 3.917735704
+BT.GOM_2     BT.GOM_2 3.416071027
+Num.MAB_2   Num.MAB_2 2.446795612
+BT.GB_3       BT.GB_3 2.258449180
+Abund_2       Abund_2 2.154730344
+Num.GOM_2   Num.GOM_2 1.957213223
+BT.MAB_3     BT.MAB_3 1.834408330
+cal.GOM_3   cal.GOM_3 1.086600276
+cal.GB_3     cal.GB_3 1.042642943
+SST.GB_1     SST.GB_1 0.649852353
+SST.GOM_2   SST.GOM_2 0.580150938
+BT.GB_1       BT.GB_1 0.367368145
+cal.GOM_2   cal.GOM_2 0.320534478
+SST.SS_2     SST.SS_2 0.235712609
+BT.GOM_1     BT.GOM_1 0.214646210
+OISST_2       OISST_2 0.195715645
+Surv.BT_2   Surv.BT_2 0.137050322
+SST.GB_2     SST.GB_2 0.128051644
+Surv.SST_2 Surv.SST_2 0.126821383
+BT.SS_2       BT.SS_2 0.120944388
+Num.MAB_1   Num.MAB_1 0.109802975
+HW_1             HW_1 0.064079091
+cal.GB_2     cal.GB_2 0.055383905
+Surv.SST_1 Surv.SST_1 0.055343645
+Num.GB_1     Num.GB_1 0.054894314
+BT.SS_1       BT.SS_1 0.054616118
+HW                 HW 0.032528632
+BT.GB           BT.GB 0.019196919
+OISST           OISST 0.012013788
+cal.GB         cal.GB 0.008823369
+Surv.BT       Surv.BT 0.007406460
+BT.MAB         BT.MAB 0.004374278
+Surv.SST     Surv.SST 0.000000000
+BT.GOM         BT.GOM 0.000000000
+BT.SS           BT.SS 0.000000000
+SST.GB         SST.GB 0.000000000
+SST.GOM       SST.GOM 0.000000000
+SST.MAB       SST.MAB 0.000000000
+SST.SS         SST.SS 0.000000000
+HW.GB           HW.GB 0.000000000
+HW.GOM         HW.GOM 0.000000000
+HW.MAB         HW.MAB 0.000000000
+Abund           Abund 0.000000000
+Num.GB         Num.GB 0.000000000
+Num.GOM       Num.GOM 0.000000000
+Num.MAB       Num.MAB 0.000000000
+cal.GOM       cal.GOM 0.000000000
+cal.SS         cal.SS 0.000000000
+OISST_1       OISST_1 0.000000000
+Surv.BT_1   Surv.BT_1 0.000000000
+BT.MAB_1     BT.MAB_1 0.000000000
+SST.GOM_1   SST.GOM_1 0.000000000
+SST.MAB_1   SST.MAB_1 0.000000000
+SST.SS_1     SST.SS_1 0.000000000
+HW.GB_1       HW.GB_1 0.000000000
+HW.GOM_1     HW.GOM_1 0.000000000
+HW.MAB_1     HW.MAB_1 0.000000000
+Abund_1       Abund_1 0.000000000
+Num.GOM_1   Num.GOM_1 0.000000000
+cal.GB_1     cal.GB_1 0.000000000
+cal.GOM_1   cal.GOM_1 0.000000000
+cal.SS_1     cal.SS_1 0.000000000
+BT.GB_2       BT.GB_2 0.000000000
+BT.MAB_2     BT.MAB_2 0.000000000
+SST.MAB_2   SST.MAB_2 0.000000000
+HW_2             HW_2 0.000000000
+HW.GB_2       HW.GB_2 0.000000000
+HW.GOM_2     HW.GOM_2 0.000000000
+HW.MAB_2     HW.MAB_2 0.000000000
+cal.SS_2     cal.SS_2 0.000000000
+HW_3             HW_3 0.000000000
+HW.GB_3       HW.GB_3 0.000000000
+HW.GOM_3     HW.GOM_3 0.000000000
+HW.MAB_3     HW.MAB_3 0.000000000
+cal.SS_3     cal.SS_3 0.000000000</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb17"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1" aria-hidden="true" tabindex="-1"></a>null.dev<span class="ot">&lt;-</span>brd.mod<span class="sc">$</span>self.statistics<span class="sc">$</span>mean.null</span>
+<span id="cb17-2"><a href="#cb17-2" aria-hidden="true" tabindex="-1"></a>resid.dev<span class="ot">&lt;-</span>brd.mod<span class="sc">$</span>cv.statistics<span class="sc">$</span>deviance.mean</span>
+<span id="cb17-3"><a href="#cb17-3" aria-hidden="true" tabindex="-1"></a>dev.expl<span class="ot">&lt;-</span>((null.dev<span class="sc">-</span>resid.dev)<span class="sc">/</span>null.dev)<span class="sc">*</span><span class="dv">100</span></span>
+<span id="cb17-4"><a href="#cb17-4" aria-hidden="true" tabindex="-1"></a>dev.expl</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>[1] 15.28695</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb19"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb19-1"><a href="#cb19-1" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(<span class="at">data=</span><span class="fu">summary</span>(brd.mod),<span class="fu">aes</span>(<span class="at">x=</span><span class="fu">reorder</span>(var,rel.inf),<span class="at">y=</span>rel.inf))<span class="sc">+</span></span>
+<span id="cb19-2"><a href="#cb19-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_bar</span>(<span class="at">stat=</span><span class="st">"identity"</span>)<span class="sc">+</span></span>
+<span id="cb19-3"><a href="#cb19-3" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(<span class="at">x=</span><span class="st">""</span>,<span class="at">y=</span><span class="st">"relative influence"</span>)<span class="sc">+</span></span>
+<span id="cb19-4"><a href="#cb19-4" aria-hidden="true" tabindex="-1"></a>  <span class="fu">coord_flip</span>()</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<p><img src="Preliminary-Results_files/figure-html/Boosted%20Regression%20Trees-2.png" class="img-fluid" width="672"></p>
+</div>
+<div class="cell-output-display">
+<p><img src="Preliminary-Results_files/figure-html/Boosted%20Regression%20Trees-3.png" class="img-fluid" width="672"></p>
+</div>
+</div>
+<ul>
+<li><p>Not shown here are different runs with just up to 2 year lags, and with no lags</p>
+<ul>
+<li>top variables always include food and temp</li>
+</ul></li>
+<li><p>Almost all the top 10 variables include a two year lag and include sst, bt, and abundance of copepods in all or either GB and/or GoM</p></li>
+<li><p>Ran with more data and found that relative influence of top variables changed and instead most top variables have a 3 years lag, but also include sst and copepods</p></li>
+<li><p>Several variables were not important at all</p></li>
+</ul>
+</section>
+</section>
+
+</main>
+<!-- /main column -->
+<script id="quarto-html-after-body" type="application/javascript">
+window.document.addEventListener("DOMContentLoaded", function (event) {
+  const toggleBodyColorMode = (bsSheetEl) => {
+    const mode = bsSheetEl.getAttribute("data-mode");
+    const bodyEl = window.document.querySelector("body");
+    if (mode === "dark") {
+      bodyEl.classList.add("quarto-dark");
+      bodyEl.classList.remove("quarto-light");
+    } else {
+      bodyEl.classList.add("quarto-light");
+      bodyEl.classList.remove("quarto-dark");
+    }
+  }
+  const toggleBodyColorPrimary = () => {
+    const bsSheetEl = window.document.querySelector("link#quarto-bootstrap");
+    if (bsSheetEl) {
+      toggleBodyColorMode(bsSheetEl);
+    }
+  }
+  toggleBodyColorPrimary();  
+  const icon = "";
+  const anchorJS = new window.AnchorJS();
+  anchorJS.options = {
+    placement: 'right',
+    icon: icon
+  };
+  anchorJS.add('.anchored');
+  const clipboard = new window.ClipboardJS('.code-copy-button', {
+    target: function(trigger) {
+      return trigger.previousElementSibling;
+    }
+  });
+  clipboard.on('success', function(e) {
+    // button target
+    const button = e.trigger;
+    // don't keep focus
+    button.blur();
+    // flash "checked"
+    button.classList.add('code-copy-button-checked');
+    var currentTitle = button.getAttribute("title");
+    button.setAttribute("title", "Copied!");
+    setTimeout(function() {
+      button.setAttribute("title", currentTitle);
+      button.classList.remove('code-copy-button-checked');
+    }, 1000);
+    // clear code selection
+    e.clearSelection();
+  });
+  function tippyHover(el, contentFn) {
+    const config = {
+      allowHTML: true,
+      content: contentFn,
+      maxWidth: 500,
+      delay: 100,
+      arrow: false,
+      appendTo: function(el) {
+          return el.parentElement;
+      },
+      interactive: true,
+      interactiveBorder: 10,
+      theme: 'quarto',
+      placement: 'bottom-start'
+    };
+    window.tippy(el, config); 
+  }
+  const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+  for (var i=0; i<noterefs.length; i++) {
+    const ref = noterefs[i];
+    tippyHover(ref, function() {
+      // use id or data attribute instead here
+      let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+      try { href = new URL(href).hash; } catch {}
+      const id = href.replace(/^#\/?/, "");
+      const note = window.document.getElementById(id);
+      return note.innerHTML;
+    });
+  }
+  var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+  for (var i=0; i<bibliorefs.length; i++) {
+    const ref = bibliorefs[i];
+    const cites = ref.parentNode.getAttribute('data-cites').split(' ');
+    tippyHover(ref, function() {
+      var popup = window.document.createElement('div');
+      cites.forEach(function(cite) {
+        var citeDiv = window.document.createElement('div');
+        citeDiv.classList.add('hanging-indent');
+        citeDiv.classList.add('csl-entry');
+        var biblioDiv = window.document.getElementById('ref-' + cite);
+        if (biblioDiv) {
+          citeDiv.innerHTML = biblioDiv.innerHTML;
+        }
+        popup.appendChild(citeDiv);
+      });
+      return popup.innerHTML;
+    });
+  }
+});
+</script>
+</div> <!-- /content -->
+
+
+
+</body></html>
