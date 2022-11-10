@@ -2,10 +2,11 @@
 ##      Script Purpose:   Prepare multivariate time series for analysis, explore correlations
 ##      Author:           Adelle Molina
 ##      Created:          7/22/22
-##      Updated:          10/3/22
+##      Updated:          10/19/22
 ##      To Do:            1. Area weighted annual means --> done for survey data but not for other variables, which need it?
-##                        3. Organize autocorrelation section
+##                        2. Organize autocorrelation section
 ##      Notes:            Some saved plots include unweighted averages
+
 # Libraries ---------------------------------------------------------------
 
 #devtools::install_github("slucey/RSurvey/Survdat")
@@ -166,13 +167,6 @@ Survey <- NEFSC.RAW%>%
                    BT = mean(BOTTEMP, na.rm = TRUE),
                    BS = mean(BOTSALIN, na.rm = TRUE))
 
-# Split by season --> didn't use this yet
-Fall <- Survey%>%
-  dplyr::filter(SEASON==c("FALL"))
-
-Spring <- Survey%>%
-  dplyr::filter(SEASON==c("SPRING"))  
-
 # Summarize across both seasons (should these be weighted by sampling frequency within region?)
 Survey.Annual <- NEFSC.RAW%>%
   dplyr::group_by(YEAR, EPU) %>%
@@ -189,15 +183,35 @@ strat.area <- Survdat::getarea(EPU_sf, 'EPU')
 # calculate area weights
 NEFSC.weight   <- Survdat::stratprep(as.data.table(NEFSC.RAW),   strat.area, strat.col = 'EPU', area.col = 'Area')
 
-
 # Calculate area weighted annual values
 Survey.Annual.weighted <- NEFSC.weight%>% 
   dplyr::group_by(YEAR) %>%
-  dplyr::summarise(Surv.SST = weighted.mean(SURFTEMP, W.h, na.rm = TRUE),
-                   Surv.SSS = weighted.mean(SURFSALIN, W.h,na.rm = TRUE),
-                   Surv.BT = weighted.mean(BOTTEMP, W.h,na.rm = TRUE),
-                   Surv.BS = weighted.mean(BOTSALIN, W.h,na.rm = TRUE))%>%
+  dplyr::summarise(SST = weighted.mean(SURFTEMP, W.h, na.rm = TRUE),
+                   SSS = weighted.mean(SURFSALIN, W.h,na.rm = TRUE),
+                   BT = weighted.mean(BOTTEMP, W.h,na.rm = TRUE),
+                   BS = weighted.mean(BOTSALIN, W.h,na.rm = TRUE))%>%
   dplyr::rename(year=YEAR)
+
+# Split by season and compute area weighted annual mean
+Fall <- NEFSC.weight%>%
+  dplyr::filter(SEASON==c("FALL"))%>%
+  dplyr::rename(year=YEAR)
+
+Fall <- Fall%>%
+  dplyr::group_by(year)%>%
+  dplyr::summarise(FaSST = weighted.mean(SURFTEMP, W.h, na.rm = TRUE),
+                   FaBT = weighted.mean(BOTTEMP, W.h,na.rm = TRUE))%>%
+  dplyr::select(year, FaSST, FaBT)
+
+Spring <- NEFSC.weight%>%
+  dplyr::filter(SEASON==c("SPRING"))%>%
+  dplyr::rename(year=YEAR)
+
+Spring <- Spring%>%
+  dplyr::group_by(year)%>%
+  dplyr::summarise(SpSST = weighted.mean(SURFTEMP, W.h, na.rm = TRUE),
+                   SpBT = weighted.mean(BOTTEMP, W.h,na.rm = TRUE))%>%
+  dplyr::select(year, SpSST, SpBT)
 
 # Calculate annual values
 #Survey.AnAll <- NEFSC.RAW%>% 
@@ -446,7 +460,7 @@ dev.off()
 physvar.list <- list(OISST.Annual, OISST.reg, 
                      NMFS.BT.AnAll, NMFS.SST.AnAll,
                      Survey.Annual.weighted, SurvBT.Regional, SurvSST.Regional, 
-                     HW.Annual, HW.reg, GSI.Annual, CP)
+                     HW.Annual, HW.reg, GSI.Annual, CP, Fall, Spring)
 physvar.list <- physvar.list %>% reduce(full_join, by='year')
 
 # Trim down to the year range we want 
@@ -454,6 +468,9 @@ physvar.list <- physvar.list %>%
   dplyr::filter(between(year,1982,2018))
 
 # Load and modify Biological Data ---------------------------------------------------------
+
+# Haddock SSB (Retrospective Adjusted from 2019 GoM Assessment)
+had  <- read.csv(file.choose(), header = T, blank.lines.skip = T)
 
 # Chlorophyll has regional annual medians from 1998-2019
 Primary <- chl_pp
@@ -480,6 +497,7 @@ PP.reg <- PP.reg %>%
 # Zooplankton  ------------------------------------------------------------
 
 # Load calanus r data, save as object, modify and summarize
+head(calanus_stage)
 copepod <- calanus_stage
 copepod <- copepod%>%
   mutate_if(is.character, as.factor)%>%
@@ -496,32 +514,32 @@ cope <- copepod %>%
 cope.adult <- cope%>%
   dplyr::filter(Stage==c("adt"))%>%
   group_by(Time)%>%
-  dplyr::summarise(CAD = mean(Anmean))%>%
+  dplyr::summarise(CalAD = mean(Anmean))%>%
   dplyr::rename(year=Time)
 
 cope.c5 <- cope%>%
   dplyr::filter(Stage==c("c5"))%>%
   group_by(Time)%>%
-  dplyr::summarise(CC5 = mean(Anmean))%>%
+  dplyr::summarise(CalC5 = mean(Anmean))%>%
   dplyr::rename(year=Time)
 
 cope.Ann <- copepod%>%
   group_by(Time)%>%
-  dplyr::summarise(Cope = mean(Anmean))%>%
+  dplyr::summarise(CalAbun = mean(Anmean))%>%
   dplyr::rename(year=Time)
 
 cope.reg <- calanus_stage%>%
   dplyr::filter(EPU%in% c("GOM", "SS", "GB"))%>% # Select the spawning regions only
   group_by(Time, EPU)%>%
-  dplyr::summarise(Cope = mean(Value))%>%
+  dplyr::summarise(CalAbun = mean(Value))%>%
   dplyr::rename(year=Time)
 
 # Pivot and rename for merge
-c.reg <- pivot_wider(cope.reg, names_from = EPU, values_from = Cope) 
+c.reg <- pivot_wider(cope.reg, names_from = EPU, values_from = CalAbun) 
 c.reg <- c.reg %>%
-  dplyr::rename(cal.GB=GB,
-                cal.GOM=GOM,
-                cal.SS=SS)
+  dplyr::rename(Cal.GB=GB,
+                Cal.GOM=GOM,
+                Cal.SS=SS)
 
 # 5 other Rdata files for zooplankton
 # 1. abundance
@@ -538,7 +556,7 @@ head(zoo_strat_abun) # regional abundance by taxa (euphausids, cnidaria, large a
 # Load the abundance data and edit
 zoo.numb <- zoo_strat_abun%>%
   group_by(Time, EPU, Var)%>%
-  dplyr::summarise(Abund = mean(Value))%>%
+  dplyr::summarise(ZooAbun = mean(Value))%>%
   dplyr::rename(year=Time)
 
 # Create another object with annual average across taxa
@@ -549,14 +567,14 @@ zoonum_reg <- zoo.numb%>%
 # Pivot and rename for merge
 zn.reg <- pivot_wider(zoonum_reg, names_from = EPU, values_from = Abund) 
 zn.reg <- zn.reg %>%
-  dplyr::rename(Num.GB=GB,
-                Num.GOM=GOM,
-                Num.MAB=MAB)
+  dplyr::rename(ZooAbun.GB=GB,
+                ZooAbun.GOM=GOM,
+                ZooAbun.MAB=MAB)
 
 # Calculate annual average
 zoonum_an <- zoo_strat_abun%>%
   group_by(Time)%>%
-  dplyr::summarise(Abund = mean(Value))%>%
+  dplyr::summarise(ZooAbun = mean(Value))%>%
   dplyr::rename(year=Time)
 
 # Load the oi (regional density) data and edit
@@ -804,7 +822,7 @@ tiff("Recruitment Indices.tiff", width = 8, height = 6, units = 'in', res = 300)
 ggarrange(ssb, rec, SPR, srresid, devs, nodev, Rs)
 dev.off()
 
-# Join biological and environmental covariates to herring data -----------------------------------------
+# Join biological and environmental covariates to herring data (don't use these) -----------------------------------------
 vars <- merge(physvar.list, biovar.list ,
                       by = "year", 
                       all.x = TRUE, all.y = T)
@@ -820,7 +838,6 @@ multivariate <- multivariate %>%
 write.csv(multivariate, file = "combined.data.csv", row.names = F)
 
 # Pull out primary production variables and salinity (need a shorter time series for those)
-# also could creater a longer series with just survey temps
 multi.short <- multivariate%>% 
   select(year, OISST, BT, SST, Surv.SST, Surv.BT, 
          BT.GOM, BT.GB, BT.MAB , BT.SS, 
@@ -831,13 +848,13 @@ multi.short <- multivariate%>%
 
 # Create a smaller version of variable list (no redundant survey data (anomalies vs raw, just use raw))
 var.list <- list(OISST.Annual, OISST.reg, Survey.Annual.weighted, SurvBT.Regional, SurvSST.Regional, 
+                 Fall, Spring,
                  HW.Annual, HW.reg, GSI.Annual, CP, PP.Ann, PP.reg,
-                 zoonum_an, zn.reg, zooden_an,cope.adult, cope.c5, cope.Ann, c.reg) 
+                 zoonum_an, zn.reg, zooden_an,cope.adult, cope.c5, cope.Ann, c.reg, had) 
 var.list <- var.list %>% reduce(full_join, by='year')
 var.list <- var.list%>% 
   #dplyr::select(-Surv.SSS, -Surv.BS) %>% 
   dplyr::filter(between(year,1982,2018))
-
 write.csv(var.list, file = "Data/variables.csv", row.names = F)
 
 # Auto Correlation ---------------------------------------------------------
@@ -1092,7 +1109,8 @@ null.dev<-mod.nolag$self.statistics$mean.null
 resid.dev<-mod.nolag$cv.statistics$deviance.mean
 dev.expl<-((null.dev-resid.dev)/null.dev)*100
 
-dev.expl
+dev.expl1
+# hmm ok yeah it keeps changing
 
 # relative influence
 ri<-summary(mod2)

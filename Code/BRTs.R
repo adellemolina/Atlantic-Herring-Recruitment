@@ -2,13 +2,10 @@
 ##      Script Purpose:   Run boosted regression trees
 ##      Author:           Adelle Molina
 ##      Created:          9/13/22
-##      Updated:          9/13/22
-##      Notes:            1. this is a mess...all diff tree stuff all over; model with only 2 year lags explained 30% of the deviance at first...now it's no higher than 6...the more I reduce variables
-##      To Do:            2. Save figs --> using reduced lists so easier to see
-##                        3. Run more trees --> use fuller dataset
-##                        4. Plot tree results 
-    
-# Packages
+##      Updated:          11/9/22
+##      Notes:            
+
+# Packages ----------------------------------------------------------------
 library(dplyr)
 library(ggplot2)
 library(corrplot)
@@ -20,9 +17,7 @@ library(gridExtra)
 
 # Load data ---------------------------------------------------
 # load possible variables list (from csv exported from other script where data is processed)
-# this is a reduced list...prob should have just kept everything and thrown it all in
 vars <- read.csv(file = 'variables.csv', header=T)
-more <- read.csv(file = 'multivariatedata.csv', header=T)
 ncol(vars)
 vars <- vars[,-1]
 names(vars)
@@ -56,7 +51,7 @@ herring = structure(list(
                 "2015", "2016", "2017", "2018", "2019", "2020", "2021"),
   class = "data.frame")
 
-#Calculate Spawning Success Rs (lnRt/ssb-1)
+#Calculate Spawning Success Rs (lnRt/ssbt-1)
 herring$Rs <- NA
 for(i in 2:nrow(herring)){
   herring$Rs[i] <- log(herring$recruits[i]/herring$SSB[i-1])
@@ -64,14 +59,19 @@ for(i in 2:nrow(herring)){
 
 # join 
 dat <- merge(herring, vars,by = "year")
-names(dat)
+
+# Reduce to exclude the subregion variables
+dat.all <- dat%>%
+  dplyr::select(year, Rs, SSB, OISST, SST, SSS, BT, BS, FaSST, FaBT, SpSST, SpBT, HW, GSI, CP, ZooAbun, CalAbun, ZooDens, HadSSB)
+
 # Plot time series and correlations --------------------------------------------------------
+# These are similar but slightly different from the figures in quarto doc
 # Temperature
 temp.dat <- dat%>% 
   dplyr::select(year, BT.GOM, BT.GB, BT.MAB , BT.SS,
          SST.GOM, SST.GB, SST.MAB , SST.SS, 
          Surv.SST,  Surv.BT, 
-         SPR, logR.dev, Rs) # woops doesn't work now b/c I took some of these out of vars
+         SPR, logR.dev, Rs) 
 temps.melt <- melt(temp.dat, id.vars="year", variable.name="series")
 ggplot(temps.melt, aes(year,value)) +
   geom_line()+ 
@@ -109,60 +109,59 @@ ggstatsplot::ggcorrmat(
   type = "nonparametric",
   colors = c("darkred", "white", "steelblue"))
 
-# these are now in quarto....with slight updates
-
-
-
 # Add lags ----------------------------------------------------------------
-# remove vars that didn't seem as important --> where is best step to do this, prob not here wanna keep
-vars <- vars%>% 
-  dplyr::select(-ZooDens, -CAD, -CC5, -Cope, -CP, -GSI)
 
-# Create object for each lag using just the physical variables 
-lag1 <-vars 
+# 1. Using larger dataset
+# Filter to years
+herr <- herring%>% 
+  dplyr::select(year, SPR, logR.dev, Rs, SSB)%>%
+  dplyr::filter(year%in%c(seq(1982,2018)))
+
+# remove highly correlated variables 
+ts.vars <- vars%>% 
+  dplyr::select(-ZooDens,-OISST.GB,-OISST.GOM,-OISST.MAB,-OISST.SS,-Surv.SSS, -CAD, -CC5, -cal.SS, -CP, -GSI, -HW.GB, -HW.GOM, -HW.MAB, -PP.GB, -PP.GOM, -PP.MAB,-PP.GOM, -Abund)
+
+# Create a separate object for each lag (1-3 years), shift, append lag to column name
+lag1 <-ts.vars 
 lag1$year <- lag1$year+1
-colnames(lag1)[2:ncol(lag1)]<-paste(colnames(vars)[2:ncol(vars)],"_1",sep="")
+colnames(lag1)[2:ncol(lag1)]<-paste(colnames(ts.vars)[2:ncol(ts.vars)],"_1",sep="")
 lag1<-as.data.frame(lag1)
 lag1<-lag1%>%
   add_row(year=1982, .before=1)%>%
   dplyr::filter((year<2019)%>% replace_na(TRUE)) # add na to earlier years and chop off extra years
 lag1<-lag1[,-c(1)] # remove extra year column
 
-lag2 <-vars 
+lag2 <-ts.vars 
 lag2$year <- lag2$year+2
-colnames(lag2)[2:ncol(lag2)]<-paste(colnames(vars)[2:ncol(vars)],"_2",sep="")
+colnames(lag2)[2:ncol(lag2)]<-paste(colnames(ts.vars)[2:ncol(ts.vars)],"_2",sep="")
 lag2<-as.data.frame(lag2)
 lag2<-lag2%>%
   add_row(year=1982, .before=1)%>%
   add_row(year=1983, .after=1)%>%
-  dplyr::filter((year<2019)%>% replace_na(TRUE)) # add na to earlier years and chop off extra years
-lag2<-lag2[,-c(1)] # remove extra columns
+  dplyr::filter((year<2019)%>% replace_na(TRUE)) 
+lag2<-lag2[,-c(1)] 
 
-df3 <-dat 
-df3$year <- df3$year+3
-colnames(df3)[2:ncol(df3)]<-paste(colnames(dat)[2:ncol(dat)],"_3",sep="")
-df3<-as.data.frame(df3)
-df3<-df3%>%
+lag3 <-ts.vars 
+lag3$year <- lag3$year+3
+colnames(lag3)[2:ncol(lag3)]<-paste(colnames(ts.vars)[2:ncol(ts.vars)],"_3",sep="")
+lag3<-as.data.frame(lag3)
+lag3<-lag3%>%
   add_row(year=1982, .before=1)%>%
   add_row(year=1983, .after=1)%>%
   add_row(year=1984, .after=2)%>%
-  dplyr::filter((year<2019)%>% replace_na(TRUE)) # add na to earlier years and chop off extra years
-df3<-df3[,-c(1)] # remove extra columns
+  dplyr::filter((year<2019)%>% replace_na(TRUE)) 
+lag3<-lag3[,-c(1)] 
 
-# Join lagged data with the herring data (select only 3 possible variables) and filter to years
-full.dat <- herring%>% 
-  dplyr::select(year, SPR, logR.dev, Rs)%>%
-  dplyr::filter(year%in%c(seq(1982,2018)))
+# Combine 
+dat2 <- merge(herr, ts.vars,by = "year")
+lagdat <- cbind(dat2,lag1,lag2, lag3)
+brtdat <- data.frame(lagdat)
 
-dflag<-cbind(herr,vars[,-1], lag1,lag2)
-regdat <- data.frame(dflag)
-names(regdat)
-
-
-# Add lags to a smaller set of possible variables (no regional indices and no pp)
+# remove unimportant variables (primary prod, salinity) & some regional indices
 ts.vars2 <- ts.vars%>% 
   dplyr::select(-cal.GB, -cal.GOM, -Num.GB, - Num.GOM, -Num.MAB, -SST.GB, -SST.GOM, -SST.MAB, -SST.SS, -BT.GB, -BT.GOM, -BT.MAB, -BT.SS)
-# Create a separate object for each lag (1-3 for now), shift, append lag to column name
+
+# 2. Using a smaller set of possible variables (no regional and no pp)
 lag1.1 <-ts.vars2 
 lag1.1$year <- lag1.1$year+1
 colnames(lag1.1)[2:ncol(lag1.1)]<-paste(colnames(ts.vars2)[2:ncol(ts.vars2)],"_1",sep="")
@@ -192,117 +191,157 @@ lag3.1<-lag3.1%>%
   add_row(year=1984, .after=2)%>%
   dplyr::filter((year<2019)%>% replace_na(TRUE)) 
 lag3.1<-lag3.1[,-c(1)] 
-dat.noreg <- merge(ts.recr, ts.vars2,by = "year")
+
+dat.noreg <- merge(herr, ts.vars2,by = "year")
 dat.noreglag <- cbind(dat.noreg,lag1.1,lag2.1, lag3.1)
 brtdat.noreg <- data.frame(dat.noreglag)
-# Boosted Regression Trees ------------------------------------------------
 
-# Run full trees (all possible vars with up to 3 year lags) for all three possible recruitment index
-# 1. SPR (spawner per recruit vector...all I've presented thus far is for this one, but based on last chat w/ John perhaps this isn't the best)
-# 2. Rs (this is the one to use)
-# 3. Log recruit devs
-#########   1. SPR with fuller version of data
-ncol(brtdat) # how many columns
-which(colnames(brtdat)=="SPR") # which column is SPR, the dependent variable
-names(brtdat)
-SPR.mod <-gbm.step(data=brtdat,
-              gbm.x=c(1, 6, 9:92), # Select all columns after herring r indices, and also ssb and year?
-              gbm.y=7, # Spawner per recruit
-              family="gaussian", tree.complexity=1, # (1 = no interactions)
-              learning.rate=0.01, bag.fraction=0.7)
+# 3. Add lags to the dataset without region
+lag1 <-dat.all
+lag1$year <- lag1$year+1
+colnames(lag1)[2:ncol(lag1)]<-paste(colnames(dat.all)[2:ncol(dat.all)],"_1",sep="")
+lag1<-as.data.frame(lag1)
+lag1<-lag1%>%
+  add_row(year=1982, .before=1)%>%
+  dplyr::filter((year<2019)%>% replace_na(TRUE)) # add na to earlier years and chop off extra years
+lag1<-lag1[,-c(1)] # remove extra year column
 
-null.dev<-SPR.mod$self.statistics$mean.null
-resid.dev<-SPR.mod$cv.statistics$deviance.mean
-dev.expl<-((null.dev-resid.dev)/null.dev)*100
-dev.expl # dev explained is lower than past models for same variable
-SPR.rel <-summary(SPR.mod)
-ggplot(data=SPR.rel,aes(x=reorder(var,rel.inf),y=rel.inf))+
-  geom_bar(stat="identity")+
-  labs(x="",y="relative influence")+
-  coord_flip()
+lag2 <-dat.all 
+lag2$year <- lag2$year+2
+colnames(lag2)[2:ncol(lag2)]<-paste(colnames(dat.all)[2:ncol(dat.all)],"_2",sep="")
+lag2<-as.data.frame(lag2)
+lag2<-lag2%>%
+  add_row(year=1982, .before=1)%>%
+  add_row(year=1983, .after=1)%>%
+  dplyr::filter((year<2019)%>% replace_na(TRUE)) 
+lag2<-lag2[,-c(1)] 
 
+lag3 <-dat.all
+lag3$year <- lag3$year+3
+colnames(lag3)[2:ncol(lag3)]<-paste(colnames(dat.all)[2:ncol(dat.all)],"_3",sep="")
+lag3<-as.data.frame(lag3)
+lag3<-lag3%>%
+  add_row(year=1982, .before=1)%>%
+  add_row(year=1983, .after=1)%>%
+  add_row(year=1984, .after=2)%>%
+  dplyr::filter((year<2019)%>% replace_na(TRUE)) 
+lag3<-lag3[,-c(1)] 
 
-# Repeat with no regional indices
-ncol(brtdat.noreg) # how many columns
-which(colnames(brtdat.noreg)=="SPR") # which column is SPR, the dependent variable
-names(brtdat.noreg)
-SPR.mod.noreg <-gbm.step(data=brtdat.noreg,
-                   gbm.x=c(1, 6, 9:40), # Select all columns after herring r indices, and also ssb and year?
-                   gbm.y=4, # Spawner per recruit
+# Combine 
+lag.alldat <- cbind(dat.all.sm,lag1,lag2, lag3)
+lagged.alldat <- data.frame(lag.alldat)
+
+# Boosted Regression Trees for Rs ------------------------------------------------
+
+# 1. Smallest possible dataset without regional variables or labs
+basic <-gbm.step(data=dat.all,
+                   gbm.x=c(1, 3:19), 
+                   gbm.y=2, # Rs
                    family="gaussian", tree.complexity=1, # (1 = no interactions)
                    learning.rate=0.01, bag.fraction=0.7)
+basic.dev <- (((basic$self.statistics$mean.null)-(basic$cv.statistics$deviance.mean))/(basic$self.statistics$mean.null))*100
+basic.dev
+basic.sum <-summary(basic)
 
-null.dev<-SPR.mod.noreg$self.statistics$mean.null
-resid.dev<-SPR.mod.noreg$cv.statistics$deviance.mean
-dev.expl<-((null.dev-resid.dev)/null.dev)*100
-dev.expl # dev explained is again lower than past models for same variable, so taking away variables was worse
-SPR.noreg.rel <-summary(SPR.mod.noreg)
-ggplot(data=SPR.noreg.rel,aes(x=reorder(var,rel.inf),y=rel.inf))+
-  geom_bar(stat="identity")+
-  labs(x="",y="relative influence")+
-  coord_flip()
+# 2. Remove seasonal temps
+dat.all.sm <- dat.all%>%
+  dplyr::select(-FaSST, -FaBT, -SpSST, -SpBT)
 
-# now run a model for Rs
-#########   2. Rs
+basic1 <-gbm.step(data=dat.all.sm,
+                 gbm.x=c(1, 3:15), 
+                 gbm.y=2, # Rs
+                 family="gaussian", tree.complexity=1, # (1 = no interactions)
+                 learning.rate=0.01, bag.fraction=0.7)
+basic1.dev <- (((basic1$self.statistics$mean.null)-(basic1$cv.statistics$deviance.mean))/(basic1$self.statistics$mean.null))*100
+basic1.dev
+basic.sum1 <- summary(basic1)
+
+# 3. Using the even simpler no regional set with lags
+ncol(lagged.alldat)
+lag.all <-gbm.step(data=lagged.alldat,
+                  gbm.x=c(1, 3:69), 
+                  gbm.y=2, # Rs
+                  family="gaussian", tree.complexity=1, # (1 = no interactions)
+                  learning.rate=0.01, bag.fraction=0.7)
+lag.all.dev <- (((lag.all$self.statistics$mean.null)-(lag.all$cv.statistics$deviance.mean))/(lag.all$self.statistics$mean.null))*100
+lag.all.dev
+summary(lag.all)
+# Deviance explained is lower than in the models above without lags
+
+# Early BRT models using Rs ----------------------------------------------------------------------
+
+# 1. Using a full dataset
 ncol(brtdat) # how many columns
 which(colnames(brtdat)=="Rs") # which column is Rs, the dependent variable
 names(brtdat)
 Rs.mod <-gbm.step(data=brtdat,
-                   gbm.x=c(1, 6, 9:92), # Select all columns after herring r indices, and also ssb and year?
-                   gbm.y=8, # Rs
+                   gbm.x=c(1, 5, 6:85), # Select all columns after herring r indices, ssb, year
+                   gbm.y=4, # Rs
                    family="gaussian", tree.complexity=1, # (1 = no interactions)
                    learning.rate=0.01, bag.fraction=0.7)
 
 null.dev<-Rs.mod$self.statistics$mean.null
 resid.dev<-Rs.mod$cv.statistics$deviance.mean
-dev.expl<-((null.dev-resid.dev)/null.dev)*100
-dev.expl # dev explained is higher than for SPR (using both reduced and full possible vars)
+dev_a <-((null.dev-resid.dev)/null.dev)*100
+dev_a # dev explained is higher than for SPR (using both reduced and full possible vars) 
+
 Rs.rel <-summary(Rs.mod)
 ggplot(data=Rs.rel,aes(x=reorder(var,rel.inf),y=rel.inf))+
   geom_bar(stat="identity")+
   labs(x="",y="relative influence")+
   coord_flip()
-# again here the copepods in GB had an extremely (maybe too high relative influence)
+# still lots of unimportant variables, zoo and copepods in GB had an extremely high relative influence (maybe too much)
 
-# Repeat for Rs using slightly smaller dataset (all ones with 0 influence)
-
+# 2. Repeat w slightly smaller dataset (remove variables with 0 or near 0 influence)
 brtdat.sm <- brtdat%>% 
   dplyr::select(-PP, -PP_1, -PP_2, -PP_3, -Cope, -Cope_1, -Cope_2, -Cope_3, -Surv.SST, -Surv.SST_1, -Surv.SST_2, -Surv.SST_3, -Surv.BT, -Surv.BT_1, -Surv.BT_2, -Surv.BT_3)
 ncol(brtdat.sm) # how many columns
-names(brtdat.sm) # how many columns
+names(brtdat.sm) # 
 Rs.mod1 <-gbm.step(data=brtdat.sm,
-                   gbm.x=c(1, 6, 9:76), # Select all columns after herring r indices, and also ssb and year?
-                   gbm.y=8, # Rs
+                   gbm.x=c(1, 5, 6:77), 
+                   gbm.y=4, # Rs
                    family="gaussian", tree.complexity=1, # (1 = no interactions)
                    learning.rate=0.01, bag.fraction=0.7)
-
+# This was the "best" model
 null.dev<-Rs.mod1$self.statistics$mean.null
 resid.dev<-Rs.mod1$cv.statistics$deviance.mean
+dev.expl1<-((null.dev-resid.dev)/null.dev)*100
+dev.expl1 
+
+# 3. Similar to 2, but was using a slightly different version of brtdat.sm (about 8 less parameters)
+Rs.mod1.1 <-gbm.step(data=brtdat.sm,
+                   gbm.x=c(1, 5, 6:69),
+                   gbm.y=4, # Rs
+                   family="gaussian", tree.complexity=2, 
+                   learning.rate=0.01, bag.fraction=0.7)
+
+null.dev<-Rs.mod1.1$self.statistics$mean.null
+resid.dev<-Rs.mod1.1$cv.statistics$deviance.mean
 dev.expl<-((null.dev-resid.dev)/null.dev)*100
 dev.expl # this model has highest deviance explained thus far
 
-Rs.rel1 <-summary(Rs.mod1)
+Rs.rel1 <-summary(Rs.mod1.1)
 ggplot(data=Rs.rel1,aes(x=reorder(var,rel.inf),y=rel.inf))+
   geom_bar(stat="identity")+
   labs(x="",y="relative influence")+
   coord_flip()
+# same pattern as model above
+# Can probably remove even more 0 influence sets (like SST.MAB) and in other cases can remove lags (like sst.ss, and surv bs)
 
-# Repeat for Rs using even smaller dataset
-ncol(brtdat.noreg) # how many columns
-which(colnames(brtdat.noreg)=="Rs") 
-names(brtdat.noreg)
-brtdat.noreg <- brtdat.noreg%>% 
+# 4. Repeat for Rs using even smaller dataset
+brtdat.noreg2 <- brtdat.noreg%>% 
   dplyr::select(-PP, -PP_1, -PP_2, -PP_3)
-Rs.mod2 <-gbm.step(data=brtdat.noreg,
-                  gbm.x=c(1, 6, 9:36), # Select all columns after herring r indices, and also ssb and year?
-                  gbm.y=8, # Rs
+which(colnames(brtdat.noreg)=="Rs") 
+Rs.mod2 <-gbm.step(data=brtdat.noreg2,
+                  gbm.x=c(1, 5, 6:29), # Select all columns after herring r indices
+                  gbm.y=4, # Rs
                   family="gaussian", tree.complexity=1, # (1 = no interactions)
                   learning.rate=0.01, bag.fraction=0.7)
 
 null.dev<-Rs.mod2$self.statistics$mean.null
 resid.dev<-Rs.mod2$cv.statistics$deviance.mean
 dev.expl<-((null.dev-resid.dev)/null.dev)*100
-dev.expl # dev explained is higher than for SPR (using both reduced and full possible vars)
+dev.expl # dev explained is much lower (prob b/c removed regional food indices)
 
 Rs.rel2 <-summary(Rs.mod2)
 ggplot(data=Rs.rel2,aes(x=reorder(var,rel.inf),y=rel.inf))+
@@ -310,79 +349,84 @@ ggplot(data=Rs.rel2,aes(x=reorder(var,rel.inf),y=rel.inf))+
   labs(x="",y="relative influence")+
   coord_flip()
 
-#########   3. Recruitment deviations
+# Early BRT models using SPR or Deviations ---------------------------------------------------------------------
+# with fuller version of data
+ncol(brtdat) # how many columns
+which(colnames(brtdat)=="SPR") # which column is SPR, the dependent variable
+SPR.mod <-gbm.step(data=brtdat,
+                   gbm.x=c(1, 5, 6:85), # Select all columns after herring r indices, and also ssb and year?
+                   gbm.y=2, # Spawner per recruit
+                   family="gaussian", tree.complexity=1, # (1 = no interactions)
+                   learning.rate=0.01, bag.fraction=0.7)
+
+null.dev<-SPR.mod$self.statistics$mean.null
+resid.dev<-SPR.mod$cv.statistics$deviance.mean
+dev.expl<-((null.dev-resid.dev)/null.dev)*100
+dev.expl # dev explained is lower than past models for same variable (14%) w 1750 trees
+SPR.rel <-summary(SPR.mod)
+ggplot(data=SPR.rel,aes(x=reorder(var,rel.inf),y=rel.inf))+
+  geom_bar(stat="identity")+
+  labs(x="",y="relative influence")+
+  coord_flip()
+# lots of unimportant variables, highest relative influence is 10% for GOM zoo abun
+
+# Repeat with no regional indices
+ncol(brtdat.noreg) # how many columns
+which(colnames(brtdat.noreg)=="SPR") # which column is SPR, the dependent variable
+names(brtdat.noreg)
+SPR.mod.noreg <-gbm.step(data=brtdat.noreg,
+                         gbm.x=c(1, 5, 6:33), # Select all columns after herring r indices, ssb and year
+                         gbm.y=2, # Spawner per recruit
+                         family="gaussian", tree.complexity=1, # (1 = no interactions)
+                         learning.rate=0.001, bag.fraction=0.7)
+
+null.dev<-SPR.mod.noreg$self.statistics$mean.null
+resid.dev<-SPR.mod.noreg$cv.statistics$deviance.mean
+dev.expl<-((null.dev-resid.dev)/null.dev)*100
+dev.expl # dev explained is again lower (actually negative, is that a problem?), so taking away variables was worse, but oisst has high relative influence
+SPR.noreg.rel <-summary(SPR.mod.noreg)
+ggplot(data=SPR.noreg.rel,aes(x=reorder(var,rel.inf),y=rel.inf))+
+  geom_bar(stat="identity")+
+  labs(x="",y="relative influence")+
+  coord_flip()
+
+# Run a model with full data for the recruitment deviations
 devs.mod <-gbm.step(data=brtdat,
-                  gbm.x=c(1, 6, 9:92), # Select all columns after herring r indices, and also ssb and year?
-                  gbm.y=4, # logRdevs
-                  family="gaussian", tree.complexity=1, # (1 = no interactions)
-                  learning.rate=0.01, bag.fraction=0.7)
+                    gbm.x=c(1, 5, 6:85),
+                    gbm.y=3, # logRdevs
+                    family="gaussian", tree.complexity=1, # (1 = no interactions)
+                    learning.rate=0.01, bag.fraction=0.7)
 
 null.dev<-devs.mod$self.statistics$mean.null
 resid.dev<-devs.mod$cv.statistics$deviance.mean
 dev.expl<-((null.dev-resid.dev)/null.dev)*100
-dev.expl # dev explained is very low for devs (using full possible vars) and pretty low (using reduced vars), but interestingly one variable explains a huge amount of variance in full (cal GB), but perhaps spurious
-
-# relative influence
+dev.expl # dev explained is very low for devs (using full possible vars) and pretty low (using reduced vars)
 devs.rel <-summary(devs.mod)
-
-# plot
 ggplot(data=devs.rel,aes(x=reorder(var,rel.inf),y=rel.inf))+
   geom_bar(stat="identity")+
   labs(x="",y="relative influence")+
   coord_flip()
 
 
+# Partial Dependence Plots ---------------------------------------------------------------
 
-
-# old trees for only up to 2 year lags
-# Select optimal learning rate and number of trees --> with reduced possible pars
-ncol(regdat) # how many columns
-which(colnames(regdat)=="SPR") # which column is SPR, the dependent variable
-mod<-gbm.step(data=regdat,
-              gbm.x=c(5:55), # Select all columns after herring r indices
-              gbm.y=2, # Spawner per recruit
-              family="gaussian",
-              tree.complexity=1, # (1 = no interactions)
-              learning.rate=0.01,
-              bag.fraction=0.7)# fraction of data used in test set (.7)
-#lr=.1, bf = .7, nt = 2050
-
-summary(mod)
-# percent deviance explained ( (null dev - resid dev) / null dev ) * 100
-null.dev<-mod$self.statistics$mean.null
-resid.dev<-mod$cv.statistics$deviance.mean
-dev.expl<-((null.dev-resid.dev)/null.dev)*100
-dev.expl
-
-# relative influence
-ri<-summary(mod)
-
-# plot
-ggplot(data=ri,aes(x=reorder(var,rel.inf),y=rel.inf))+
-  geom_bar(stat="identity")+
-  labs(x="",y="relative influence")+
-  coord_flip()
-
-
-# BRT Plots ---------------------------------------------------------------
-
-plot.gbm(Rs.mod1,71)
-ncol(brtdat.sm)
+# For the model with highest deviance explained 
+names(dat.all.sm)
 x<-c()
-for(i in 1:(ncol(brtdat.sm) -6)){
-  pdp<-plot.gbm(Rs.mod1,i,return.grid=T)
+for(i in 1:(ncol(dat.all.sm) -1)){
+  pdp<-plot.gbm(basic1,i,return.grid=T)
   pdp$var<-rep(colnames(pdp)[1],nrow(pdp))
-  pdp$ri<-rep(Rs.rel1$rel.inf[which(row.names(Rs.rel1)==colnames(pdp)[1])],nrow(pdp))
+  pdp$ri<-rep(basic.sum1$rel.inf[which(row.names(basic.sum1)==colnames(pdp)[1])],nrow(pdp))
   colnames(pdp)<-c("val","Rs","var","ri")
   x<-rbind(x,pdp)
 }
 
 # order by relative influence
-x$var<-factor(x$var,levels=row.names(Rs.rel1))
+x$var<-factor(x$var,levels=row.names(basic.sum1))
 
 # top 6
-top6<-as.character(Rs.rel1$var[1:6])
-relinf<-round(Rs.rel1$rel.inf[1:6],1)
+top6<-as.character(basic.sum1$var[1:6])
+relinf<-round(basic.sum1$rel.inf[1:6],1)
 
 x%>%
   filter(var==top6[1])%>%
@@ -428,37 +472,37 @@ x%>%
 
 pdpz <- grid.arrange(p1,p2,p3,p4,p5,p6,ncol=3)
 
-# ok so for the variable I should be using I found a model that has high deviance explained and one variable explains tons of the variance
+# More messy BRTs ---------------------------------------------------
+# not organized below her
 
-
-
-# BRT grouped variables ---------------------------------------------------
-# only use nonlagged data
-names(regdat)
+# Check to see if the reduced dataset still has any sig correlations
+brtdat.sm2.nolag <- brtdat.sm2[,1:22]
+cors <- ggstatsplot::ggcorrmat(
+  data = brtdat.sm2.nolag,
+  type = "nonparametric",
+  colors = c("darkred", "white", "steelblue"))
+cors
 # Fit with different settings
-mod.nolag<-gbm.step(data=regdat,
-              gbm.x=c(5:21), # Select all columns after herring r indices with  no lag
-              gbm.y=2, # Spawner per recruit
-              family="gaussian",
-              tree.complexity=1, # (1 = no interactions)
-              learning.rate=0.01,
-              bag.fraction=0.7)# fraction of data used in test set (.7)
-
+mod.nolag<-gbm.step(data=brtdat.sm,
+                    gbm.x=c(1,5:23), # Select all columns after herring r indices with  no lag
+                    gbm.y=4, # Spawner per recruit
+                    family="gaussian",
+                    tree.complexity=1, # (1 = no interactions)
+                    learning.rate=0.01,
+                    bag.fraction=0.7)# fraction of data used in test set (.7)
+summary(mod.nolag)
 mod.nolag$n.trees
 brd.mod$n.trees
 null.dev<-mod.nolag$self.statistics$mean.null
 resid.dev<-mod.nolag$cv.statistics$deviance.mean
 dev.expl<-((null.dev-resid.dev)/null.dev)*100
 dev.expl
+# this model with no lags had almost just as high of deviance explained (40, oope nope that's for a spr model), nope it's a bit lower at 36
 ggplot(data=summary(mod.nolag),aes(x=reorder(var,rel.inf),y=rel.inf))+
   geom_bar(stat="identity")+
   labs(x="",y="relative influence")+
   coord_flip()
-# GB zooplankton abundance $ MAB HW
-help("plot.gbm")
-plot(mod.nolag, )
 
-names(regdat)
 mod.nolag<-gbm.step(data=regdat,
                     gbm.x=c(5:21), # Select all columns after herring r indices with  no lag
                     gbm.y=2, # Spawner per recruit
@@ -466,10 +510,55 @@ mod.nolag<-gbm.step(data=regdat,
                     tree.complexity=1, # (1 = no interactions)
                     learning.rate=0.01,
                     bag.fraction=0.7)# fraction of data used in test set (.7)
-
-# messy disorganized
-# old summaries of nt results
 summary(mod.nolag)
+
+# Original tree exploration (settings and play around) -----------------------------------------------
+
+# Create object for each lag using just the physical variables 
+lag1 <-vars 
+lag1$year <- lag1$year+1
+colnames(lag1)[2:ncol(lag1)]<-paste(colnames(vars)[2:ncol(vars)],"_1",sep="")
+lag1<-as.data.frame(lag1)
+lag1<-lag1%>%
+  add_row(year=1982, .before=1)%>%
+  dplyr::filter((year<2019)%>% replace_na(TRUE)) # add na to earlier years and chop off extra years
+lag1<-lag1[,-c(1)] # remove extra year column
+
+lag2 <-vars 
+lag2$year <- lag2$year+2
+colnames(lag2)[2:ncol(lag2)]<-paste(colnames(vars)[2:ncol(vars)],"_2",sep="")
+lag2<-as.data.frame(lag2)
+lag2<-lag2%>%
+  add_row(year=1982, .before=1)%>%
+  add_row(year=1983, .after=1)%>%
+  dplyr::filter((year<2019)%>% replace_na(TRUE)) # add na to earlier years and chop off extra years
+lag2<-lag2[,-c(1)] # remove extra columns
+
+dflag<-cbind(herr,vars[,-1], lag1,lag2)
+regdat <- data.frame(dflag)
+
+# Select optimal learning rate and number of trees --> with reduced possible pars
+ncol(regdat) # how many columns
+which(colnames(regdat)=="SPR") # which column is SPR, the dependent variable
+mod<-gbm.step(data=regdat,
+              gbm.x=c(5:55), # Select all columns after herring r indices
+              gbm.y=2, # Spawner per recruit
+              family="gaussian",
+              tree.complexity=1, # (1 = no interactions)
+              learning.rate=0.01,
+              bag.fraction=0.7)# fraction of data used in test set (.7)
+#lr=.1, bf = .7, nt = 2050
+
+# percent deviance explained ( (null dev - resid dev) / null dev ) * 100
+null.dev<-mod$self.statistics$mean.null
+resid.dev<-mod$cv.statistics$deviance.mean
+dev.expl<-((null.dev-resid.dev)/null.dev)*100
+dev.expl
+ri<-summary(mod)
+ggplot(data=ri,aes(x=reorder(var,rel.inf),y=rel.inf))+
+  geom_bar(stat="identity")+
+  labs(x="",y="relative influence")+
+  coord_flip()
 
 mod2<-gbm.step(data=regdat,
                gbm.x=c(5:38), # Exclude 3 year lag for now
@@ -481,7 +570,6 @@ mod2<-gbm.step(data=regdat,
                max.trees=20000,
                step.size=50)
 
-
 mod3<-gbm.step(data=regdat2,
                gbm.x=c(4:24), # Exclude 3 year lag for now
                gbm.y=3, # Log deviations
@@ -492,29 +580,14 @@ mod3<-gbm.step(data=regdat2,
                max.trees=20000,
                step.size=50,
                n.trees=50)
-
 ri3<-summary(mod2)
-
-mod
-
 ggplot(data=ri3,aes(x=reorder(var,rel.inf),y=rel.inf))+
   geom_bar(stat="identity")+
   labs(x="",y="relative influence")+
   coord_flip()
 # SST(2&1), bt2, gsi2, cad2
 
-# lr .1, bf .7, nt = 450
-# lr .01, bf .7, nt = 1200
-# lr .01, bf .7, nt = 9300
-# lr .01, bf .7, nt = 1350, 1700
-# bag fraction .7 and learning rate 0.0001 --> 7500 trees 
-# bag fraction .7 and learning rate 0.01 --> 3500 trees 
-# removed some predictors, bag fraction .7 and learning rate 0.001 --> 8500 trees 
-# But predicted deviance is very low, doesn't seem right
-
 mod.simp <- gbm.simplify(mod3)
-
-
 mod<-gbm.step(data=regdat,
               gbm.x=c(2:25, 26:103), # Exclude 3 year lag for now
               gbm.y=26, # Spawner per recruit

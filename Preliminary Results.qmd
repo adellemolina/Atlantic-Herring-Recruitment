@@ -1,7 +1,9 @@
 ---
 title: "Preliminary Results"
 author: "Adelle Molina"
-format: html
+format:
+  pdf:
+    documentclass: report
 editor: visual
 ---
 
@@ -9,11 +11,10 @@ editor: visual
 
 Code for getting data, generating time series of possible predictors, plotting recruitment and predictor time series, producing correlation matrices to reduce the possible predictor list, and running boosted regression trees (preliminary results).
 
-## Load packages
-
 ```{r}
 #| label: load-packages
 #| include: false
+#| echo: false
 
 library(dplyr)
 library(ggplot2)
@@ -23,6 +24,8 @@ library(ggstatsplot)
 library(gbm)
 library(tidyr)
 library(dismo)
+library(gridExtra)
+library(ggcorrplot)
 ```
 
 ## Load data
@@ -37,23 +40,24 @@ The combined dataset being loaded in here came from various sources (mostly NOAA
     2.  Cold Pool index
 
     3.  Gulf Stream Index
--   Various zooplankton indices include abundance, density, and copepod abundance
+-   Various zooplankton indices include abundance, density, and calanus copepod abundance
 -   Recruitment indices came from 2022 ASAP model
 -   Other indices, such as salinity and chlorophyll might require a separate analysis b/c time series are shorter, but they are included in preliminary runs here
+-   Haddock index is the retrospective adjusted SSB from the GoM Haddock 2019 assessment
 
 ```{r}
 #| label: Load data
-#| include: false
+#| include: true
 #| echo: false
 
 # Load in the biological and physical variables 
-ts.vars <- read.csv(file = 'Data/variables.csv', header=T)
+vars <- read.csv(file = 'Data/variables.csv', header=T)
 
 # Load the herring data
 ts.recr <- read.csv(file='Data/ASAPdat.csv', header=T)
 
 # Combine
-dat <- merge(ts.recr, ts.vars,by = "year")
+dat <- merge(ts.recr, vars,by = "year")
 ```
 
 ## Preliminary plots
@@ -61,34 +65,77 @@ dat <- merge(ts.recr, ts.vars,by = "year")
 Plot time series of possible variables and correlation matrices.
 
 ```{r}
-#| label: Plot environmental data
-#| include: false
+#| label: Fig Recruit 
+#| include: true
 #| echo: false
 
-# Temperature
-temp.dat <- dat%>% 
-  dplyr::select(year, c(names(dat)[9:25]),SPR, logR.dev, Rs, SSB)
-temps.melt <- reshape2::melt(temp.dat, id.vars="year", variable.name="series")
+herr.rec <- dat%>% 
+  dplyr::select(year, recruits, R.no.devs, logR.dev, SR.std.resid, SSB, SPR,  Rs)
+herr.rec2 <- reshape2::melt(herr.rec, id.vars="year", variable.name="series")
 
-ggplot(temps.melt, aes(year,value)) +
+ggplot(herr.rec2, aes(year,value)) +
   geom_line()+ 
   theme_bw()+
-  facet_wrap(~ series, scales = "free", ncol=4)
+  facet_wrap(~ series, scales = "free")
 
 ggstatsplot::ggcorrmat(
-  data = temp.dat,
+  data = herr.rec,
   type = "nonparametric", 
   colors = c("darkred", "white", "steelblue"))
-
 
 ```
 
 ### Trends in recruitment variables:
 
+| **Recruits:** Large fluctuations, no strong year classes since 2012 and lowest numbers on record
+| **Recruitment no deviations:** increased rapidly early in the time series and has remained high throughout (this is based on the stock recruit function, right?)
+| **Log Recruitment Deviations:** Lots of interannual variability, but was generally hovering around zero, since 2010 has been lower than time series average (no sig correlations). Deviations from stock recruit function are larger in recent years.
+| **Stock Recruit Standardized Residuals**: Same pattern as log deviations with shifted scale
+| **SSB**: Trimmed data misses high biomass in 70s before decline, from lows in 80s, increase into the 2000s, then steady decline to 2010 and since relatively low (no sig correlations)
 | **Spawner per recruit vector**: Was high in the 70s-early 80s, declined sharply from 1980-2000 and has since been low. This means that the proportion of fish that reach maturity has declined (sig correlation with year and GB BT)
-| 
+| **log Recruitment success (Recruits(t)/SSB(t-1):** increased throughout the 80s and 90s, declined in 1990 to intermediate levels, then declined sharply after 2010 to 2018 and has since risen (Only significantly correlated with year)
 
-**log recruitment deviations:** Lots of interannual variability, but was generally hovering around zero, since 2010 has been lower than time series average (no sig correlations) \| **Spawning success (Recruits(t)/SSB(t-1):** increased throughout the 80s and 90s, declined in 1990 to intermediate levels, then declined sharply after 2010 to 2018 and has since risen (Only significantly correlated with year) \| **SSB**: Trimmed data misses high biomass in 70s before decline, from lows in 80s, increase into the 2000s, then steady decline to 2010 and since relatively low (no sig correlations)
+```{r}
+#| label: Code Generate temp figures
+#| include: true
+#| echo: false
+
+# Temperature
+temp.dat <- dat%>% 
+  dplyr::select(year, c(names(dat)[9:29]),SPR, logR.dev, Rs, SSB)
+temps.melt <- reshape2::melt(temp.dat, id.vars="year", variable.name="series")
+
+tempts <- ggplot(temps.melt, aes(year,value)) +
+  geom_line()+ 
+  theme_bw()+
+  facet_wrap(~ series, scales = "free", ncol=4)
+
+tempcor <- ggstatsplot::ggcorrmat(
+  data = temp.dat,
+  type = "nonparametric", 
+  colors = c("darkred", "white", "steelblue"))
+
+```
+
+```{r}
+#| label: Fig Temperature TS
+#| include: true
+#| echo: false
+#| fig-width: 8
+#| fig-height: 11
+
+tempts
+```
+
+```{r}
+#| label: Fig Temperature Corr
+#| include: true
+#| echo: false
+#| fig-width: 8
+#| fig-height: 11
+
+tempcor
+```
 
 ### Patterns and correlations in environmental variables:
 
@@ -100,6 +147,8 @@ ggstatsplot::ggcorrmat(
 
 -   Bottom and surface salinity are significantly correlated and patterns are broadly similar (just keep bottom)
 
+-   Seasonal (fall and spring) SST and BT patterns are different and correlated to various of the other temperature metrics, including the regionals
+
 -   Distinct regional patterns in SST and BT that also differ from the basin wide annual averages
 
     -   Although annual SST is correlated to the regional values, because MAB area is largest and it's a weighted average, this correlation is strongest (keep regionals)
@@ -107,13 +156,13 @@ ggstatsplot::ggcorrmat(
     -   Bottom temperature is not significantly correlated to all the regional bottom temps (keep regionals)
 
 ```{r}
-#| label: Plot environmental indices
-#| include: false
+#| label: Fig Environmental Indices
+#| include: true
 #| echo: false
 
 # Environmental Indices
 env.dat<- dat%>% 
-  dplyr::select(year, c(names(dat)[26:31]),SPR, logR.dev, Rs, SSB)
+  dplyr::select(year, c(names(dat)[30:35]),SPR, logR.dev, Rs, SSB)
 env.melt <- reshape2::melt(env.dat, id.vars="year", variable.name="series")
 ggplot(env.melt, aes(year,value)) +
   geom_line()+ 
@@ -123,34 +172,29 @@ ggstatsplot::ggcorrmat(
   data = env.dat,
   type = "nonparametric", 
   colors = c("darkred", "white", "steelblue"))
-
-
 ```
 
-### Patterns in environmental indices:
+### Patterns and correlations in environmental indices:
 
 **HW**: Lots of missing data in heatwave index, generally low in 80s-2000s, sharp increase around 2010 and high but varying intensity in last ten years (significantly correlated with other indices)
 
 -   Regional patterns broadly similar to each other and to annual (all significantly correlated)
+-   SPR significantly correlated to HW (& GB heatwave)
 
 **GSI:** Periodic variation from 80s-2000s, increase since 2010
 
 **Cold Pool:** highly variable, more positive years since 2010
 
-### **Correlations with recruitment indices:**
-
--   Note that all the recruitment indices are correlated to eachother
-
--   SPR significantly correlated to HW (& GB heatwave)
-
 ```{r}
-#| label: Plot biological variables
-#| include: false
-#| #| echo: false
-#| 
+#| label: Fig Biological variables
+#| include: true
+#| echo: false
+#| fig-width: 8
+#| fig-height: 11
+
 ## # Biological 
 bio.dat <- dat%>% 
-  dplyr::select(year,  c(names(dat)[32:46]),SPR, logR.dev, Rs, SSB)
+  dplyr::select(year,  c(names(dat)[36:51]),SPR, logR.dev, Rs, SSB)
 bio.melt <- reshape2::melt(bio.dat, id.vars="year", variable.name="series")
 ggplot(bio.melt, aes(year,value)) +
   geom_line()+ 
@@ -162,7 +206,7 @@ ggstatsplot::ggcorrmat(
   colors = c("darkred", "white", "steelblue"))
 ```
 
-### Patterns in biological indices:
+### Patterns and correlations in biological indices:
 
 **Primary Production**: short ts, increasing from 2000-2010, slight decline since then
 
@@ -180,7 +224,11 @@ ggstatsplot::ggcorrmat(
 
 **GB zooplankton abundance was significantly correlated to recruitment success**
 
-Keep regional calanus abundance and regional zooplankton abundances but drop density
+-   Keep regional calanus abundance and regional zooplankton abundances but drop density and abundance
+
+**Haddock SSB**
+
+-   Was low for most of the time series and increased rapidly around 2010
 
 ## Add lags
 
@@ -192,10 +240,10 @@ Prepare data for BRTs --\> add lags to the variables and then join back with the
 #| echo: false
 
 # remove highly correlated variables 
-ts.vars <- ts.vars%>% 
-  dplyr::select(-ZooDens,-OISST.GB,-OISST.GOM,-OISST.MAB,-OISST.SS,-Surv.SSS, -CAD, -CC5, -cal.SS, -CP, -GSI, -HW.GB, -HW.GOM, -HW.MAB, -PP.GB, -PP.GOM, -PP.MAB,-PP.GOM)
+ts.vars <- vars%>% 
+  dplyr::select(-ZooDens,-OISST.GB,-OISST.GOM,-OISST.MAB,-OISST.SS,-SSS, -CalAD, -CalC5, -Cal.SS, -CP, -GSI, -HW.GB, -HW.GOM, -HW.MAB, -PP.GB, -PP.GOM, -PP.MAB,-PP.GOM, -ZooAbun)
 
-# Create a separate object for each lag (1-3 for now), shift, append lag to column name
+# Create a separate object for each lag, shift, append lag to column name
 lag1 <-ts.vars 
 lag1$year <- lag1$year+1
 colnames(lag1)[2:ncol(lag1)]<-paste(colnames(ts.vars)[2:ncol(ts.vars)],"_1",sep="")
@@ -227,46 +275,199 @@ lag3<-lag3%>%
 lag3<-lag3[,-c(1)] 
 
 # Combine 
-dat2 <- merge(ts.recr, ts.vars,by = "year")
+herr <- ts.recr%>% 
+  dplyr::select(year, SPR, logR.dev, Rs, SSB)%>%
+  dplyr::filter(year%in%c(seq(1982,2018)))
+dat2 <- merge(herr, ts.vars,by = "year")
 lagdat <- cbind(dat2,lag1,lag2, lag3)
 brtdat <- data.frame(lagdat)
-
+ncol(brtdat)
 ```
 
 ### Run Boosted Regression Trees
 
 ```{r}
 #| label: Boosted Regression Trees
-#| include: true
-#| echo: true
-#| 
-ncol(brtdat) # how many columns
-which(colnames(brtdat)=="SPR") # which column is SPR, the dependent variable
-brd.mod <-gbm.step(data=brtdat,
-              gbm.x=c(9:96), # Select all columns after herring r indices
-              gbm.y=7, # Spawner per recruit
-              family="gaussian",
-              tree.complexity=1, # (1 = no interactions)
-              learning.rate=0.01,
-              bag.fraction=0.7)
-summary(brd.mod)
-null.dev<-brd.mod$self.statistics$mean.null
-resid.dev<-brd.mod$cv.statistics$deviance.mean
-dev.expl<-((null.dev-resid.dev)/null.dev)*100
-dev.expl
+#| output: false
+#| cache: false
 
-ggplot(data=summary(brd.mod),aes(x=reorder(var,rel.inf),y=rel.inf))+
+# Run boosted trees for RS (recruitment success aka R(t)/SSB(t0))
+ncol(brtdat) # how many columns
+which(colnames(brtdat)=="Rs") # which column is Rs, the dependent variable
+Rs.mod <-gbm.step(data=brtdat,
+                   gbm.x=c(1, 5, 6:105), # Select variables, incl ssb & year
+                   gbm.y=4, # Rs
+                   family="gaussian", tree.complexity=1, # (1 = no interactions)
+                   learning.rate=0.01, bag.fraction=0.7)
+
+null.dev<-Rs.mod$self.statistics$mean.null
+resid.dev<-Rs.mod$cv.statistics$deviance.mean
+dev.expl<-((null.dev-resid.dev)/null.dev)*100
+dev.expl 
+
+# Plot relative influence
+Rs.rel <-summary(Rs.mod)
+ggplot(data=Rs.rel,aes(x=reorder(var,rel.inf),y=rel.inf))+
   geom_bar(stat="identity")+
   labs(x="",y="relative influence")+
   coord_flip()
+# still lots of unimportant variables, zoo and copepods in GB had an extremely high relative influence and haddock ssb was up there too
+
+# Repeat w slightly smaller dataset (remove variables with 0 or near 0 influence)
+brtdat.sm <- brtdat%>% 
+  dplyr::select(-OISST, -OISST_1,-OISST_2, -OISST_3, -SST, -SST_1,-SST_2, -SST_3, -PP, -PP_1, -PP_2, -PP_3, -FaBT, -FaBT_1, -FaBT_2, -FaBT_3, -SST.MAB,-SST.MAB_1, -SST.MAB_2,-SST.MAB_3, -SST.SS, -SST.SS_1, -SST.SS_2, -SST.SS_3, -BT, -BT_1, -BT_2, -BT_3)
+ncol(brtdat.sm) # how many columns
+Rs.mod1 <-gbm.step(data=brtdat.sm,
+                   gbm.x=c(1, 5, 6:77), 
+                   gbm.y=4, # Rs
+                   family="gaussian", tree.complexity=1, # (1 = no interactions)
+                   learning.rate=0.01, bag.fraction=0.7)
+
+null.dev<-Rs.mod1$self.statistics$mean.null
+resid.dev<-Rs.mod1$cv.statistics$deviance.mean
+dev.expl1<-((null.dev-resid.dev)/null.dev)*100
+dev.expl1
+
+Rs.rel1 <-summary(Rs.mod1)
+relinf.fig <- ggplot(data=Rs.rel1,aes(x=reorder(var,rel.inf),y=rel.inf))+
+  geom_bar(stat="identity")+
+  labs(x="",y="relative influence")+
+  coord_flip()
+# same pattern as model above
+
+# Can probably remove even more 0 influence sets (cal abun) and in other cases can remove lags (BS1-3, SSTGOM1-3) maybe FaSST & BT.SS
+brtdat.sm2 <- brtdat.sm%>% 
+  dplyr::select(-CalAbun, -CalAbun_1,-CalAbun_2, -CalAbun_3, -BS_1,-BS_2, -BS_3, -SST.GOM_1, -SST.GOM_2, -SST.GOM_3)
+
+ncol(brtdat.sm2) # how many columns
+Rs.mod2 <-gbm.step(data=brtdat.sm2,
+                   gbm.x=c(1, 5, 6:67), 
+                   gbm.y=4, # Rs
+                   family="gaussian", tree.complexity=1, # (1 = no interactions)
+                   learning.rate=0.01, bag.fraction=0.7)
+
+null.dev<-Rs.mod2$self.statistics$mean.null
+resid.dev<-Rs.mod2$cv.statistics$deviance.mean
+dev.expl2<-((null.dev-resid.dev)/null.dev)*100
+dev.expl2 # Dev expl decreased, perhaps removed too many 
+
+Rs.rel2 <-summary(Rs.mod2)
+ggplot(data=Rs.rel2,aes(x=reorder(var,rel.inf),y=rel.inf))+
+  geom_bar(stat="identity")+
+  labs(x="",y="relative influence")+
+  coord_flip()
+
 ```
 
--   Not shown here are different runs with just up to 2 year lags, and with no lags
+-   The two most important variables are related to food in GB followed by haddock ssb and some temperature metrics as seen in this figure of the relative influence in the model with highest deviance explained
 
-    -   top variables always include food and temp
+-   The deviance explained for the model shown below was `r dev.expl1`%
 
--   Almost all the top 10 variables include a two year lag and include sst, bt, and abundance of copepods in all or either GB and/or GoM
+```{r}
+#| label: Fig Relative Influence Plot
+#| include: true
+#| echo: false
+#| fig-width: 8
+#| fig-height: 8
+relinf.fig
+```
 
--   Ran with more data and found that relative influence of top variables changed and instead most top variables have a 3 years lag, but also include sst and copepods
+-   this was followed by SST in GOM and spring SST three years before
 
--   Several variables were not important at all
+-   Not shown here are models for log recruit deviations (lower deviance explained but similar relative influence plots) and for spawner/recruit (also lower deviance, but different relative influence, no GB food near the top)
+
+-   Several variables were not important at all, although a few more can still be removed
+
+### Plot partial dependence
+
+```{r}
+#| label: Code Partial Dependence Plots
+#| include: false
+#| echo: false
+
+# plot the top 6 variables
+
+x<-c()
+for(i in 1:(ncol(brtdat.sm) -3)){
+  pdp<-plot.gbm(Rs.mod1,i,return.grid=T)
+  pdp$var<-rep(colnames(pdp)[1],nrow(pdp))
+  pdp$ri<-rep(Rs.rel1$rel.inf[which(row.names(Rs.rel1)==colnames(pdp)[1])],nrow(pdp))
+  colnames(pdp)<-c("val","Rs","var","ri")
+  x<-rbind(x,pdp)
+}
+
+# order by relative influence
+x$var<-factor(x$var,levels=row.names(Rs.rel1))
+
+# top 6
+top6<-as.character(Rs.rel1$var[1:6])
+relinf<-round(Rs.rel1$rel.inf[1:6],1)
+
+x%>%
+  filter(var==top6[1])%>%
+  ggplot(aes(x=val,y=Rs))+
+  geom_smooth(method="loess",se=T,color="darkgray")+
+  labs(x=paste(top6[1],"(",relinf[1],"%)",sep=""),y="Marginal effect on Rs")+
+  theme(panel.grid.minor=element_blank(),axis.text=element_text(size=12))->p1
+
+x%>%
+  filter(var==top6[2])%>%
+  ggplot(aes(x=val,y=Rs))+
+  geom_smooth(method="loess",se=T,color="darkgray")+
+  labs(x=paste(top6[2],"(",relinf[2],"%)",sep=""),y="Marginal effect on Rs")+
+  theme(panel.grid.minor=element_blank(),axis.text=element_text(size=12))->p2
+
+x%>%
+  filter(var==top6[3])%>%
+  ggplot(aes(x=val,y=Rs))+
+  geom_smooth(method="loess",se=T,color="darkgray")+
+  labs(x=paste(top6[3],"(",relinf[3],"%)",sep=""),y="Marginal effect on Rs")+
+  theme(panel.grid.minor=element_blank(),axis.text=element_text(size=12))->p3
+
+x%>%
+  filter(var==top6[4])%>%
+  ggplot(aes(x=val,y=Rs))+
+  geom_smooth(method="loess",se=T,color="darkgray")+
+  labs(x=paste(top6[4],"(",relinf[4],"%)",sep=""),y="Marginal effect on Rs")+
+  theme(panel.grid.minor=element_blank(),axis.text=element_text(size=12))->p4
+
+x%>%
+  filter(var==top6[5])%>%
+  ggplot(aes(x=val,y=Rs))+
+  geom_smooth(method="loess",se=T,color="darkgray")+
+  labs(x=paste(top6[5],"(",relinf[5],"%)",sep=""),y="Marginal effect on Rs")+
+  theme(panel.grid.minor=element_blank(),axis.text=element_text(size=12))->p5
+
+x%>%
+  filter(var==top6[6])%>%
+  ggplot(aes(x=val,y=Rs))+
+  geom_smooth(method="loess",se=T,color="darkgray")+
+  labs(x=paste(top6[6],"(",relinf[6],"%)",sep=""),y="Marginal effect on Rs")+
+  theme(panel.grid.minor=element_blank(),axis.text=element_text(size=12))->p6
+
+pdpz <- grid.arrange(p1,p2,p3,p4,p5,p6,ncol=3)
+
+```
+
+```{r}
+#| label: Fig Partial Dependence Plot
+#| include: true
+#| echo: false
+plot(pdpz)
+```
+
+Problematically, the partial dependence of the top two variables, which represent food abundance, are counter to expectations. Lower calanus and total zooplankton abundance was related to higher Rs. Not sure how to handle that because 80% seems really high for one variable.
+
+### Simpler BRTs 
+
+I also ran models with larger and even smaller datasets
+
+-   Models without the regional indices preformed better (higher deviance explained)
+
+-   As did models without lags
+
+-   Now haddock ssb is the most important variable followed by the year (the partial dependence plot for this model shows pretty clearly that they are now in a low recruitment regime
+
+    -   However, food variables are still among the top 6, and the direction of the partial dependence is the same: namely much higher Rs (log recruits/spawner) at low food abundances, which sharply declines at higher food
+
+    -   The fact that this same pattern keeps appearing (paired with a short conversation about this topic with my former lab mates) suggests to me that this isn't spurious and that something is there. Perhaps more food causes more competition and predation, which could end up actually reducing the larval survival
