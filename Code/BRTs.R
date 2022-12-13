@@ -2,11 +2,14 @@
 ##      Script Purpose:   Run boosted regression trees
 ##      Author:           Adelle Molina
 ##      Created:          9/13/22
-##      Updated:          11/9/22
-##      Notes:            
+##      Updated:          12/12/22
+##      Notes:            Clean up, organize, run more trees
+##                        Reduce the number of variables that go into the possible list, no year, 
+# some trees don't run now b/c variable list objects changed
 
 # Packages ----------------------------------------------------------------
 library(dplyr)
+library(tidyr)
 library(ggplot2)
 library(corrplot)
 library(reshape2)
@@ -20,7 +23,6 @@ library(gridExtra)
 vars <- read.csv(file = 'variables.csv', header=T)
 ncol(vars)
 vars <- vars[,-1]
-names(vars)
 
 # create herring data
 herring = structure(list(
@@ -57,15 +59,20 @@ for(i in 2:nrow(herring)){
   herring$Rs[i] <- log(herring$recruits[i]/herring$SSB[i-1])
 }
 
-# join 
+# Create one with just rs, devs, ssb, and year 
+her <- herring%>%
+  dplyr::select(year, Rs, logR.dev, SSB)%>%
+  dplyr::filter(year%in%c(seq(1982,2020)))
+
+# join full herring dataset to the variables
 dat <- merge(herring, vars,by = "year")
 
 # Reduce to exclude the subregion variables
 dat.all <- dat%>%
-  dplyr::select(year, Rs, SSB, OISST, SST, SSS, BT, BS, FaSST, FaBT, SpSST, SpBT, HW, GSI, CP, ZooAbun, CalAbun, ZooDens, HadSSB)
+  dplyr::select(year, OISST, SST, SSS, BT, BS, FaSST, FaBT, SpSST, SpBT, HW, GSI, CP, ZooAbun, CalAbun, ZooDens, HadSSB)
 
 # Plot time series and correlations --------------------------------------------------------
-# These are similar but slightly different from the figures in quarto doc
+# These are similar but slightly different from the figures in quarto doc (harder to see, more included)
 # Temperature
 temp.dat <- dat%>% 
   dplyr::select(year, BT.GOM, BT.GB, BT.MAB , BT.SS,
@@ -111,15 +118,20 @@ ggstatsplot::ggcorrmat(
 
 # Add lags ----------------------------------------------------------------
 
-# 1. Using larger dataset
+# 1. Using larger dataset -------------------------------------------------
+
 # Filter to years
 herr <- herring%>% 
   dplyr::select(year, SPR, logR.dev, Rs, SSB)%>%
-  dplyr::filter(year%in%c(seq(1982,2018)))
+  dplyr::filter(year%in%c(seq(1982,2020)))
 
-# remove highly correlated variables 
-ts.vars <- vars%>% 
-  dplyr::select(-ZooDens,-OISST.GB,-OISST.GOM,-OISST.MAB,-OISST.SS,-Surv.SSS, -CAD, -CC5, -cal.SS, -CP, -GSI, -HW.GB, -HW.GOM, -HW.MAB, -PP.GB, -PP.GOM, -PP.MAB,-PP.GOM, -Abund)
+# remove highly correlated variables (haha nope, this doesn't work b/c includes vars that arent in object)
+names(vars)
+#ts.vars <- vars%>% 
+  #dplyr::select(-ZooDens,-OISST.GB,-OISST.GOM,-OISST.MAB,-OISST.SS,-SSS, -CAD, -CC5, -cal.SS, -CP, -GSI, -HW.GB, -HW.GOM, -HW.MAB, -PP.GB, -PP.GOM, -PP.MAB,-PP.GOM, -Abund)
+
+# did this for now but fix this b/c diff list of pars
+ts.vars <- vars
 
 # Create a separate object for each lag (1-3 years), shift, append lag to column name
 lag1 <-ts.vars 
@@ -128,7 +140,7 @@ colnames(lag1)[2:ncol(lag1)]<-paste(colnames(ts.vars)[2:ncol(ts.vars)],"_1",sep=
 lag1<-as.data.frame(lag1)
 lag1<-lag1%>%
   add_row(year=1982, .before=1)%>%
-  dplyr::filter((year<2019)%>% replace_na(TRUE)) # add na to earlier years and chop off extra years
+  dplyr::filter((year<2021)%>% replace_na(TRUE)) # add na to earlier years and chop off extra years
 lag1<-lag1[,-c(1)] # remove extra year column
 
 lag2 <-ts.vars 
@@ -138,7 +150,7 @@ lag2<-as.data.frame(lag2)
 lag2<-lag2%>%
   add_row(year=1982, .before=1)%>%
   add_row(year=1983, .after=1)%>%
-  dplyr::filter((year<2019)%>% replace_na(TRUE)) 
+  dplyr::filter((year<2021)%>% replace_na(TRUE)) 
 lag2<-lag2[,-c(1)] 
 
 lag3 <-ts.vars 
@@ -149,19 +161,19 @@ lag3<-lag3%>%
   add_row(year=1982, .before=1)%>%
   add_row(year=1983, .after=1)%>%
   add_row(year=1984, .after=2)%>%
-  dplyr::filter((year<2019)%>% replace_na(TRUE)) 
+  dplyr::filter((year<2021)%>% replace_na(TRUE)) 
 lag3<-lag3[,-c(1)] 
 
 # Combine 
 dat2 <- merge(herr, ts.vars,by = "year")
-lagdat <- cbind(dat2,lag1,lag2, lag3)
+lagdat<- cbind(dat2, lag1, lag2, lag3)
 brtdat <- data.frame(lagdat)
 
+# 2. Using a smaller set of possible variables (no regional and no PP) --------
+# not right b/c years wrbng
 # remove unimportant variables (primary prod, salinity) & some regional indices
 ts.vars2 <- ts.vars%>% 
   dplyr::select(-cal.GB, -cal.GOM, -Num.GB, - Num.GOM, -Num.MAB, -SST.GB, -SST.GOM, -SST.MAB, -SST.SS, -BT.GB, -BT.GOM, -BT.MAB, -BT.SS)
-
-# 2. Using a smaller set of possible variables (no regional and no pp)
 lag1.1 <-ts.vars2 
 lag1.1$year <- lag1.1$year+1
 colnames(lag1.1)[2:ncol(lag1.1)]<-paste(colnames(ts.vars2)[2:ncol(ts.vars2)],"_1",sep="")
@@ -196,78 +208,119 @@ dat.noreg <- merge(herr, ts.vars2,by = "year")
 dat.noreglag <- cbind(dat.noreg,lag1.1,lag2.1, lag3.1)
 brtdat.noreg <- data.frame(dat.noreglag)
 
-# 3. Add lags to the dataset without region
-lag1 <-dat.all
-lag1$year <- lag1$year+1
-colnames(lag1)[2:ncol(lag1)]<-paste(colnames(dat.all)[2:ncol(dat.all)],"_1",sep="")
-lag1<-as.data.frame(lag1)
-lag1<-lag1%>%
+# 3. Add lags to the dataset without region -------------------------------
+lag1.2 <-dat.all
+lag1.2$year <- lag1.2$year+1
+colnames(lag1.2)[2:ncol(lag1.2)]<-paste(colnames(dat.all)[2:ncol(dat.all)],"_1",sep="")
+lag1.2<-as.data.frame(lag1.2)
+lag1.2<-lag1.2%>%
   add_row(year=1982, .before=1)%>%
-  dplyr::filter((year<2019)%>% replace_na(TRUE)) # add na to earlier years and chop off extra years
-lag1<-lag1[,-c(1)] # remove extra year column
+  dplyr::filter((year<2021)%>% replace_na(TRUE)) # add na to earlier years and chop off extra years
+lag1.2<-lag1.2[,-c(1)] # remove extra year column
 
-lag2 <-dat.all 
-lag2$year <- lag2$year+2
-colnames(lag2)[2:ncol(lag2)]<-paste(colnames(dat.all)[2:ncol(dat.all)],"_2",sep="")
-lag2<-as.data.frame(lag2)
-lag2<-lag2%>%
+lag2.2 <-dat.all 
+lag2.2$year <- lag2.2$year+2
+colnames(lag2.2)[2:ncol(lag2.2)]<-paste(colnames(dat.all)[2:ncol(dat.all)],"_2",sep="")
+lag2.2<-as.data.frame(lag2.2)
+lag2.2<-lag2.2%>%
   add_row(year=1982, .before=1)%>%
   add_row(year=1983, .after=1)%>%
-  dplyr::filter((year<2019)%>% replace_na(TRUE)) 
-lag2<-lag2[,-c(1)] 
+  dplyr::filter((year<2021)%>% replace_na(TRUE)) 
+lag2.2<-lag2.2[,-c(1)] 
 
-lag3 <-dat.all
-lag3$year <- lag3$year+3
-colnames(lag3)[2:ncol(lag3)]<-paste(colnames(dat.all)[2:ncol(dat.all)],"_3",sep="")
-lag3<-as.data.frame(lag3)
-lag3<-lag3%>%
+lag3.2 <-dat.all
+lag3.2$year <- lag3.2$year+3
+colnames(lag3.2)[2:ncol(lag3.2)]<-paste(colnames(dat.all)[2:ncol(dat.all)],"_3",sep="")
+lag3.2<-as.data.frame(lag3.2)
+lag3.2<-lag3.2%>%
   add_row(year=1982, .before=1)%>%
   add_row(year=1983, .after=1)%>%
   add_row(year=1984, .after=2)%>%
-  dplyr::filter((year<2019)%>% replace_na(TRUE)) 
-lag3<-lag3[,-c(1)] 
+  dplyr::filter((year<2021)%>% replace_na(TRUE)) 
+lag3.2<-lag3.2[,-c(1)] 
 
 # Combine 
-lag.alldat <- cbind(dat.all.sm,lag1,lag2, lag3)
+short.dat <- merge(her, dat.all,by = "year")
+lag.alldat <- cbind(short.dat,lag1.2,lag2.2, lag3.2)
 lagged.alldat <- data.frame(lag.alldat)
 
-# Boosted Regression Trees for Rs ------------------------------------------------
+# Boosted Regression Trees ------------------------------------------------
 
-# 1. Smallest possible dataset without regional variables or labs
+# 1. Smallest possible tree without regional variables or lags ---------
+# this won't work now...need to add back herring vars
+names(dat.all)
 basic <-gbm.step(data=dat.all,
-                   gbm.x=c(1, 3:19), 
+                   gbm.x=c(4:20), 
                    gbm.y=2, # Rs
                    family="gaussian", tree.complexity=1, # (1 = no interactions)
                    learning.rate=0.01, bag.fraction=0.7)
 basic.dev <- (((basic$self.statistics$mean.null)-(basic$cv.statistics$deviance.mean))/(basic$self.statistics$mean.null))*100
-basic.dev
+basic.dev # 46%
 basic.sum <-summary(basic)
+basic.sum # top vars are had, zooabun, ssb, bs, hw and all have high relative influence
 
-# 2. Remove seasonal temps
+ # Repeat for logdevs
+basic2 <-gbm.step(data=dat.all,
+                 gbm.x=c(4:20), 
+                 gbm.y=3, # logrdev
+                 family="gaussian", tree.complexity=1, # (1 = no interactions)
+                 learning.rate=0.01, bag.fraction=0.7)
+basic2.dev <- (((basic2$self.statistics$mean.null)-(basic2$cv.statistics$deviance.mean))/(basic2$self.statistics$mean.null))*100
+basic2.dev # 36%
+basic2.sum <-summary(basic2)
+basic2.sum # top 5 (had, zooabun, zooden, hw, fabt)
+
+# 2. Remove seasonal temps -----------------------------------------------
 dat.all.sm <- dat.all%>%
   dplyr::select(-FaSST, -FaBT, -SpSST, -SpBT)
+# this won't work now...need to add back herring vars
 
 basic1 <-gbm.step(data=dat.all.sm,
-                 gbm.x=c(1, 3:15), 
+                 gbm.x=c(4:16), 
                  gbm.y=2, # Rs
                  family="gaussian", tree.complexity=1, # (1 = no interactions)
                  learning.rate=0.01, bag.fraction=0.7)
 basic1.dev <- (((basic1$self.statistics$mean.null)-(basic1$cv.statistics$deviance.mean))/(basic1$self.statistics$mean.null))*100
-basic1.dev
-basic.sum1 <- summary(basic1)
+basic1.dev # 57 when year was included, down to 46 without year aka something represented in year is missing but same as model above
+basic.sum1 <- summary(basic1) # top 5 (had, zooabun, ssb, hw, zoodens)
 
-# 3. Using the even simpler no regional set with lags
+# 3. No region with lags --------------------------------------------------
 ncol(lagged.alldat)
 lag.all <-gbm.step(data=lagged.alldat,
-                  gbm.x=c(1, 3:69), 
+                  gbm.x=c(4:68), 
                   gbm.y=2, # Rs
                   family="gaussian", tree.complexity=1, # (1 = no interactions)
                   learning.rate=0.01, bag.fraction=0.7)
 lag.all.dev <- (((lag.all$self.statistics$mean.null)-(lag.all$cv.statistics$deviance.mean))/(lag.all$self.statistics$mean.null))*100
-lag.all.dev
-summary(lag.all)
-# Deviance explained is lower than in the models above without lags
+lag.all.dev # was 31%, now 27 with fixed vars/lags, still much lower than in the models above without lags
+summary(lag.all) # top 5 (had, sss, bs, sss1, spsst3)
 
+# Repeat for deviations
+lag.all2 <-gbm.step(data=lagged.alldat,
+                   gbm.x=c(4:68), 
+                   gbm.y=3, # logRdev
+                   family="gaussian", tree.complexity=1, # (1 = no interactions)
+                   learning.rate=0.01, bag.fraction=0.7)
+lag.all2.dev <- (((lag.all2$self.statistics$mean.null)-(lag.all2$cv.statistics$deviance.mean))/(lag.all2$self.statistics$mean.null))*100
+lag.all2.dev # 35%,  higher than same model for Rs
+summary(lag.all2) # top 5 (had, hw2, spsst3, oisst1, hw)
+
+# hmm there are still some redundant vars here
+names(dat.all) # oisst and sst, choose one, 
+# Stopped organizing here
+# diff model for deviations based on larger dataset
+# 1. No regionals
+names(brtdat)
+devsmod1 <-gbm.step(data=brtdat,
+                 gbm.x=c(5,6, 11,13, 23, 27:28,33, 38:40,44,48),
+                 gbm.y=3, # log R devs
+                 family="gaussian", tree.complexity=1, # (1 = no interactions)
+                 learning.rate=0.01, bag.fraction=0.7)
+devs.dev <- (((devsmod1$self.statistics$mean.null)-(devsmod1$cv.statistics$deviance.mean))/(devsmod1$self.statistics$mean.null))*100
+devs.dev
+devs.sum <-summary(devsmod1)
+plot(devsmod1,13)
+# Similar results as for Rs but some more sensible ones...hmm need to decide on maybe one food variable
 # Early BRT models using Rs ----------------------------------------------------------------------
 
 # 1. Using a full dataset

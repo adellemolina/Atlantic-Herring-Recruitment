@@ -2,11 +2,10 @@
 ##      Script Purpose:   Prepare multivariate time series for analysis, explore correlations
 ##      Author:           Adelle Molina
 ##      Created:          7/22/22
-##      Updated:          10/19/22
-##      To Do:            1. Area weighted annual means --> done for survey data but not for other variables, which need it?
-##                        2. Organize autocorrelation section
-##      Notes:            Some saved plots include unweighted averages
-
+##      Updated:          12/12/22
+##      To Do:            2. Organize (sections that say not updated, esp the end and plot bottom temp)
+##                        3. multicollinearity and autocorrelation
+##                        5. Update quarto, organize, condense, add more trees
 # Libraries ---------------------------------------------------------------
 
 #devtools::install_github("slucey/RSurvey/Survdat")
@@ -26,13 +25,17 @@ library(data.table)
 library(gbm)
 library(dismo)
 library(gridExtra)
+library(quarto)
 
-
+# not sure if need
 library(lubridate)
 library(CCA)
 
 # Load and modify environmental data ---------------------------------------------------
-# OISST: Manually downloaded daily mean SST (1982-present, missing 1981 for some reason) from https://psl.noaa.gov/data/gridded/data.noaa.oisst.v2.highres.html
+
+# OISST -------------------------------------------------------------------
+
+# Manually downloaded daily mean SST (1982-present, missing 1981 for some reason) from https://psl.noaa.gov/data/gridded/data.noaa.oisst.v2.highres.html
 # In separate script, computed daily mean in each EPU, combined, and exported, load that back in
 
 OISST  <- read.csv(file.choose(), header = T, blank.lines.skip = T)
@@ -70,58 +73,12 @@ OISST.reg <- OISST.reg %>%
                 OISST.MAB=MAB,
                 OISST.SS=SS)
 
-# cold pool index (from ecodata) only MAB, various indices from 1958-2021
-CP <- cold_pool %>%
-  dplyr::filter(Var%in%c("cold_pool_index"))%>% # select the cold pool index variable
-  dplyr::select(Time, Value)%>%
-  dplyr::rename(year=Time,
-         CP = Value)
-
-# gulf stream index (from ecodata) from 1954-2020 for all regions 
-GSI <- gsi
-GSI$Year.Mo <- as.character(GSI$Time)
-
-#split up time column into year and month
-GSI <- GSI %>%
-  as.data.frame()%>%
-  separate(Year.Mo, c("Year","Month"), sep = 4, remove = T, fill = "left", convert = T, extra = "merge") 
-
-# compute annual average
-GSI.Annual <- GSI %>%
-  dplyr::group_by(Year) %>%
-  summarise(GSI = mean(Value))%>%
-  rename(year=Year)
-
-# marine heatwave intensity (from ecodata) by epu from 1982-2020, multiple variables
-HW <- heatwave
-HW.Annual <- HW %>%
-  dplyr::filter(Var%in%c("cumulative intensity"))%>% # select cumulative intensity as the index value
-  dplyr::group_by(Time) %>%
-  dplyr::summarise(HW = mean(Value))%>% # calculate annual mean across all regions, should this be weighted?
-  dplyr::rename(year=Time)
-
-# annual means by region
-HW.Regional <- heatwave %>%
-  dplyr::filter(Var%in%c("cumulative intensity"))%>%
-  dplyr::group_by(Time, EPU) %>%
-  dplyr::summarise(HW = mean(Value, na.rm=T))%>%
-  dplyr::rename(year=Time)%>%
-  as.data.frame()
-
-# Pivot and rename for merge
-# oops was fucking around with this to get rid of nas but it was fine all along
-HW.reg <- HW.Regional%>%
-  tidyr::pivot_wider(names_from = EPU, values_from = HW)  %>%
-  dplyr::rename(HW.GB=GB,
-                HW.GOM=GOM,
-                HW.MAB=MAB)
-
-# Compute Surface and Bottom Temp and Sal from NEFSC survey data ----------------------------------------------------------
+# Surface & Bottom Temp and Sal from NEFSC survey ----------------------------------------------------------
 
 # Survey data (2 forms)
-#1.  Anomalies (load in data called NEFSC Temp Anomalies)
+# 1.  Anomalies ---------------------------------------------------------------
 
-# From ecodata github, regional bottom temperature, edited in separate script and exported as a csv, load that back in
+#load in NEFSC Temp Anomalies, From ecodata github, regional bottom temperature, edited in separate script and exported as a csv, load that back in
 NEFSC  <- read.csv(file.choose(), header = T, blank.lines.skip = T) # survey temperature anomalies
 
 # calculate annual mean bottom temp by region --> add the reference to the anomaly
@@ -154,21 +111,21 @@ NMFS.SST.AnAll <- NMFS.SST%>%
   dplyr::summarise(SST = mean(ActualSST))%>%
   rename(year=Time)
 
-#2.  RAW
+# 2.  RAW -----------------------------------------------------------------
 # Raw surface and bottom temp, sal from Survey 
 # From survdat, trimmed to EPU in another script (it's called Survdat EPU)
 NEFSC.RAW <- read.csv(file.choose(), header = T, blank.lines.skip = T) 
-
+table(NEFSC.RAW$YEAR)
 # Summarize by season, year, and EPU
-Survey <- NEFSC.RAW%>%
+Surv <- NEFSC.RAW%>%
   dplyr::group_by(YEAR, SEASON, EPU) %>%
   dplyr::summarise(SST = mean(SURFTEMP, na.rm = TRUE),
                    SSS = mean(SURFSALIN, na.rm = TRUE),
                    BT = mean(BOTTEMP, na.rm = TRUE),
                    BS = mean(BOTSALIN, na.rm = TRUE))
 
-# Summarize across both seasons (should these be weighted by sampling frequency within region?)
-Survey.Annual <- NEFSC.RAW%>%
+# Summarize across both seasons 
+Surv.An <- NEFSC.RAW%>%
   dplyr::group_by(YEAR, EPU) %>%
   dplyr::summarise(SST = mean(SURFTEMP, na.rm = TRUE),
                    SSS = mean(SURFSALIN, na.rm = TRUE),
@@ -183,8 +140,14 @@ strat.area <- Survdat::getarea(EPU_sf, 'EPU')
 # calculate area weights
 NEFSC.weight   <- Survdat::stratprep(as.data.table(NEFSC.RAW),   strat.area, strat.col = 'EPU', area.col = 'Area')
 
-# Calculate area weighted annual values
-Survey.Annual.weighted <- NEFSC.weight%>% 
+# save this as its own object
+Weights <- NEFST.weight%>%
+  dplyr::group_by(EPU, Area) %>%
+  dplyr::select(EPU, Area, W.h)
+Weights <- unique(Weights)
+
+# Calculate area weighted annual values --> USE THIS
+Surv.An.Wt <- NEFSC.weight%>% 
   dplyr::group_by(YEAR) %>%
   dplyr::summarise(SST = weighted.mean(SURFTEMP, W.h, na.rm = TRUE),
                    SSS = weighted.mean(SURFSALIN, W.h,na.rm = TRUE),
@@ -213,17 +176,8 @@ Spring <- Spring%>%
                    SpBT = weighted.mean(BOTTEMP, W.h,na.rm = TRUE))%>%
   dplyr::select(year, SpSST, SpBT)
 
-# Calculate annual values
-#Survey.AnAll <- NEFSC.RAW%>% 
-  #dplyr::group_by(YEAR) %>%
-  #dplyr::summarise(Surv.SST = weighted.mean(SURFTEMP, weights$W.h, na.rm = TRUE),
-                   #Surv.SSS = mean(SURFSALIN, na.rm = TRUE),
-                   #Surv.BT = mean(BOTTEMP, na.rm = TRUE),
-                   #Surv.BS = mean(BOTSALIN, na.rm = TRUE))%>%
-  dplyr::rename(year=YEAR)
-
 # Create object with columns for epu for sst and bt
-SurvSST.Regional <-  Survey.Annual%>%
+SurvSST.Reg <-  Surv.An%>%
   dplyr::select(YEAR, EPU, SST)%>%
   pivot_wider(names_from = EPU, values_from = SST) %>%
   dplyr::rename(year=YEAR,
@@ -232,7 +186,7 @@ SurvSST.Regional <-  Survey.Annual%>%
                 SST.MAB=MAB,
                 SST.SS=SS)
 
-SurvBT.Regional <-  Survey.Annual%>%
+SurvBT.Reg <-  Surv.An%>%
   dplyr::select(YEAR, EPU, BT)%>%
   pivot_wider(names_from = EPU, values_from = BT) %>%
   dplyr::rename(year=YEAR,
@@ -240,6 +194,59 @@ SurvBT.Regional <-  Survey.Annual%>%
                 BT.GOM=GOM,
                 BT.MAB=MAB,
                 BT.SS=SS)
+# Indices -----------------------------------------------------------------
+
+# cold pool index (from ecodata) only MAB, various indices from 1958-2021
+CP <- cold_pool %>%
+  dplyr::filter(Var%in%c("cold_pool_index"))%>% # select the cold pool index variable
+  dplyr::select(Time, Value)%>%
+  dplyr::rename(year=Time,
+                CP = Value)
+
+# gulf stream index (from ecodata) from 1954-2020 for all regions 
+GSI <- gsi
+GSI$Year.Mo <- as.character(GSI$Time)
+
+#split up time column into year and month
+GSI <- GSI %>%
+  as.data.frame()%>%
+  separate(Year.Mo, c("Year","Month"), sep = 4, remove = T, fill = "left", convert = T, extra = "merge") 
+
+# compute annual average
+GSI.Annual <- GSI %>%
+  dplyr::group_by(Year) %>%
+  summarise(GSI = mean(Value))%>%
+  rename(year=Year)
+
+# marine heatwave intensity (from ecodata) by epu from 1982-2020, multiple variables
+HW <- heatwave
+levels(as.factor(heatwave$Var)) # two indices, cumulative intensity and max intensity
+ggplot(HW, aes(x=Time, y=Value, col=EPU))+
+  geom_point()+
+  facet_wrap(~Var) # plot both, max intensity flat, so use cumulative
+
+# add area weights
+HW <- HW %>% left_join(Weights, by="EPU")
+HW.An <- HW %>%
+  dplyr::filter(Var%in%c("cumulative intensity"))%>% # select cumulative intensity index
+  dplyr::group_by(Time) %>%
+  dplyr::summarise(HW = weighted.mean(Value, W.h, na.rm = TRUE))%>% # calculate basin wide area weighted annual mean
+  dplyr::rename(year=Time)
+
+# annual means by region
+HW.Regional <- heatwave %>%
+  dplyr::filter(Var%in%c("cumulative intensity"))%>%
+  dplyr::group_by(Time, EPU) %>%
+  dplyr::summarise(HW = mean(Value, na.rm=T))%>%
+  dplyr::rename(year=Time)%>%
+  as.data.frame()
+
+# Pivot and rename for merge
+HW.reg <- HW.Regional%>%
+  tidyr::pivot_wider(names_from = EPU, values_from = HW)  %>%
+  dplyr::rename(HW.GB=GB,
+                HW.GOM=GOM,
+                HW.MAB=MAB)
 
 # Plot environmental indices -------------------------------------------------------------------
 # Cold Pool (annual), Gulf Stream (annual), Heatwave Index (annual and regional)
@@ -266,7 +273,7 @@ h <- ggplot(HW.Regional, aes(x = year, y = HW))  +
   geom_line(na.rm=T, size = 2) +
   ylab("Heatwave Index")
 
-h2 <- ggplot(HW.Annual, aes(x = year, y = HW))  + 
+h2 <- ggplot(HW.An, aes(x = year, y = HW))  + 
   theme_bw() +  
   geom_point(na.rm = F, size=3)+
   geom_line() +
@@ -280,38 +287,39 @@ ggarrange(c, g, h2, h)
 dev.off()
 
 # Plot SST  -------------------------------------------------------
-# Oisst (annual, regional --> poss not necessary, patterns look similar across epu)
-# seasonal oisst (Not done)
-# Survey sst annual and regional (done, from both raw and anomalies data versions)
-ois <- ggplot(OISST.Regional, aes(x = year, y = Annual.Mean, col = EPU))  + 
+
+# Oisst (annual, regional --> poss not necessary, patterns similar across epu), seasonal oisst (Not done)
+ois.reg <- ggplot(OISST.Regional, aes(x = year, y = Annual.Mean, col = EPU))  + 
   theme_bw() +  
   geom_point()+
   geom_line(na.rm = T, size = 2)+
   xlab("Year") +
   ylab("OISST")
 
-o <- ggplot(OISST.Annual, aes(x = year, y = OISST))  + 
+ois <- ggplot(OISST.Annual, aes(x = year, y = OISST))  + 
   theme_bw() +  
   geom_point()+
   geom_line(na.rm = T, size = 2)+
   xlab("Year") +
   ylab("OISST")
 
-sstanom <- ggplot(NMFS.SST, aes(x = Time, y = ActualSST, col = EPU))  + 
+# Survey SSt annual (not area weighted) and regional, From the anomalies
+sstanom.reg <- ggplot(NMFS.SST, aes(x = Time, y = ActualSST, col = EPU))  + 
   theme_bw() +   
   geom_point(na.rm = F, size=2)+
   geom_line(na.rm = T, size = 2) +
   xlab("Year") +
   ylab("In Situ SST (from anoms)")
 
-sstanom2 <- ggplot(NMFS.SST.AnAll, aes(x = year, y = SST))  + 
+sstanom <- ggplot(NMFS.SST.AnAll, aes(x = year, y = SST))  + 
   theme_bw() +   
   geom_point(na.rm = F, size=2)+
   geom_line(na.rm = T, size = 2) +
   xlab("Year") +
   ylab("In Situ SST (from anoms)")
 
-sstraw <- ggplot(Survey, aes(x = YEAR, y = SST, col = EPU, shape = SEASON))  + 
+# Survey sst annual (not area weighted) and regional, from raw 
+sstraw <- ggplot(Surv, aes(x = YEAR, y = SST, col = EPU, shape = SEASON))  + 
   theme_bw() +   
   geom_point(na.rm = F, size=2)+
   geom_line(na.rm = T, size = 1) +
@@ -319,7 +327,7 @@ sstraw <- ggplot(Survey, aes(x = YEAR, y = SST, col = EPU, shape = SEASON))  +
   ylab("In Situ SST")
 
 # repeat the above without the season variable
-sstraw2 <- ggplot(Survey.Annual, aes(x = YEAR, y = SST, col = EPU))  + 
+sstraw2 <- ggplot(Surv.An, aes(x = YEAR, y = SST, col = EPU))  + 
   theme_bw() +   
   geom_point(na.rm = F, size=2)+
   geom_line(na.rm = T, size = 2) +
@@ -328,28 +336,20 @@ sstraw2 <- ggplot(Survey.Annual, aes(x = YEAR, y = SST, col = EPU))  +
 # This plot looks different from what should be the same plot based on anomaly data, even the one with seasons has same patterns....hmmm what's going on
 # maybe b/c 2019 no fall samples...?
 
-sstraw3 <- ggplot(Survey.AnAll, aes(x = year, y = Surv.SST))  + 
+ts.SSTraw.An.Wt <- ggplot(Surv.An.Wt, aes(x = year, y = SST))  + 
   theme_bw() +   
   geom_point(na.rm = F, size=2)+
   geom_line(na.rm = T, size = 2) +
   xlab("Year") +
   ylab("In Situ SST")
-
-sstraw.weighted <- ggplot(Survey.Annual.weighted, aes(x = year, y = Surv.SST))  + 
-  theme_bw() +   
-  geom_point(na.rm = F, size=2)+
-  geom_line(na.rm = T, size = 2) +
-  xlab("Year") +
-  ylab("In Situ SST")
-ggarrange(sstraw3, sstraw.weighted)
 
 # Now combine and save
 tiff("SST.tiff", width = 8, height = 8, units = 'in', res = 300)
-ggarrange(ois, o, sstanom, sstanom2, sstraw2, sstraw.weighted, sstraw, ncol=2, nrow = 4)
+ggarrange(ois, ois.reg, sstanom.reg, sstanom, sstraw, sstraw2, ts.SSTraw.An.Wt, ncol=2, nrow = 4)
 dev.off()
-# Should remove the last year and replot b/c no fall 2019 data
+# Should remove the last year and replot b/c no fall 2019 data --> hmm just added that year back into analysis
 
-# Plot Bottom Temp --------------------------------------------------------
+# Plot Bottom Temp (not updated) --------------------------------------------------------
 # Survey bottom temp Annual & Regional (done, from both raw and anomalies data versions)
 # seasonal bt (Not DONE, use raw survey data)
 
@@ -419,28 +419,28 @@ bottom.refs <- ggplot(btref, aes(x = Time, y = Value, col = EPU))  +
 
 # Plot Salinity -----------------------------------------------------------
 # Only from survey
-surfs <- ggplot(Survey.Annual, aes(x = YEAR, y = SSS, col = EPU))  + 
+surfs <- ggplot(Surv.An, aes(x = YEAR, y = SSS, col = EPU))  + 
   theme_bw() +   
   geom_point(na.rm = F, size=2)+
   geom_line(na.rm = T, size = 1) +
   xlab("Year") +
   ylab("In Situ Surface Sal")
 
-surfs2 <- ggplot(Survey.AnAll, aes(x = year, y = Surv.SSS))  + 
+surfs2 <- ggplot(Surv.An.Wt, aes(x = year, y = SSS))  + 
   theme_bw() +   
   geom_point(na.rm = F, size=2)+
   geom_line(na.rm = T, size = 1) +
   xlab("Year") +
   ylab("In Situ Surface Sal")
 
-bs <- ggplot(Survey.Annual, aes(x = YEAR, y = BS, col = EPU))  + 
+bs <- ggplot(Surv.An, aes(x = YEAR, y = BS, col = EPU))  + 
   theme_bw() +   
   geom_point(na.rm = F, size=2)+
   geom_line(na.rm = T, size = 1) +
   xlab("Year") +
   ylab("In Situ Bottom Sal")
 
-bs2 <- ggplot(Survey.AnAll, aes(x = year, y = Surv.BS))  + 
+bs2 <- ggplot(Surv.An.Wt, aes(x = year, y = BS))  + 
   theme_bw() +   
   geom_point(na.rm = F, size=2)+
   geom_line(na.rm = T, size = 1) +
@@ -453,278 +453,441 @@ ggarrange(bs, bs2, surfs, surfs2)
 dev.off()
 
 # Combine  Physical Variables ---------------------------------------------
-# regional sst (done for raw only; objects called surv )
-# regional bt (done for raw only; objects called surv)
-# Don't use anomalies data b/c they are not the reanalized version
-# join the selected variables together
-physvar.list <- list(OISST.Annual, OISST.reg, 
-                     NMFS.BT.AnAll, NMFS.SST.AnAll,
-                     Survey.Annual.weighted, SurvBT.Regional, SurvSST.Regional, 
-                     HW.Annual, HW.reg, GSI.Annual, CP, Fall, Spring)
-physvar.list <- physvar.list %>% reduce(full_join, by='year')
+# Don't use anomalies data b/c they are not the reanalized version --> #NMFS.BT.AnAll, NMFS.SST.AnAll,
 
-# Trim down to the year range we want 
-physvar.list <- physvar.list %>%
-  dplyr::filter(between(year,1982,2018))
+# Basin wide annual averages (Oisst, survey (sst, bt, sss, bs), seasonal sst & bt, 3 indices)
+physvar.basin <- list(OISST.Annual, Surv.An.Wt, Fall, Spring, 
+                     HW.An, GSI.Annual, CP)
+physvar.basin <- physvar.basin %>% reduce(full_join, by='year')
+
+# Regional (Oisst, survey (raw sst&bt), 
+physvar.reg <- list(OISST.reg, SurvBT.Reg, SurvSST.Reg, HW.reg)
+physvar.reg <- physvar.reg %>% reduce(full_join, by='year')
+
+# Trim down to the year range we want --> don't run yet
+#physvar.list <- physvar.list %>%
+  #dplyr::filter(between(year,1982,2020))
 
 # Load and modify Biological Data ---------------------------------------------------------
 
-# Haddock SSB (Retrospective Adjusted from 2019 GoM Assessment)
-had  <- read.csv(file.choose(), header = T, blank.lines.skip = T)
+# Predators includes Haddock SSB (Retrospective Adjusted from 2019 GoM Assessment and atlantic mackerel SSB)
+predators <- read.csv(file.choose(), header = T, blank.lines.skip = T)
+predators <- predators[-1,-1]
+predators <- predators%>%
+  dplyr::rename(year=X,
+                HadSSB_GoM = Haddock...Gulf.of.Maine,
+                MackSSB=Atlantic.mackerel...Gulf.of.Maine...Cape.Hatteras)%>%
+  dplyr::select(year, HadSSB_GoM, MackSSB)%>%
+  mutate_if(is.character, as.numeric)
 
-# Chlorophyll has regional annual medians from 1998-2019
+#had  <- read.csv(file.choose(), header = T, blank.lines.skip = T)
+
+# Primary Production (chlorophyll a annual area weighted, primary production regional and area weighted basin wide)
 Primary <- chl_pp
 levels(as.factor(Primary$Var))# lots of diff vars to choose from 
+
+# First split up the time variable and add area weights
 Primary$Year <- as.character(Primary$Time)
 PP <- Primary%>%
   separate(Year, c("Extra","year"), sep = 2, remove = T, fill = "left", convert = T, extra = "merge")
-PP <- PP%>%
+PP <- PP %>% left_join(Weights, by="EPU")
+PP$year <- as.integer(PP$year, na.rm=T)
+
+# Chlorophyll a  from 1998-2020
+Chla <- PP%>%
   dplyr::filter(Var==c("ANNUAL_CHLOR_A_MEDIAN"))%>% 
-  dplyr::select(year, EPU, Value)%>%
+  dplyr::select(year, EPU, Value, Var, W.h)%>%
   as.data.frame()
 
-PP.Ann <- PP%>%
+# Calculate annual weighted mean
+Chla <- Chla%>%
   dplyr::group_by(year) %>%
-  dplyr::summarise(PP=mean(Value, na.rm = TRUE)) # should these be area weighted
-PP.Ann$year <- as.numeric(PP.Ann$year)
+  dplyr::summarise(ChlA=weighted.mean(Value, W.h, na.rm = TRUE))
 
-# Pivot and rename for merge
-PP.reg <- pivot_wider(PP, names_from = EPU, values_from = Value) 
-PP.reg <- PP.reg %>%
+# Primary Production Rate 
+PPD <- PP%>%
+  dplyr::filter(Var==c("ANNUAL_PPD_MEDIAN"))%>% 
+  dplyr::select(year, EPU, Value, Var, W.h)%>%
+  as.data.frame()
+
+# Regional PPD, pivoted and renamed for merging
+PPD.reg <- PPD %>% 
+  dplyr::select(year, EPU, Value)%>%
+  pivot_wider(names_from = EPU, values_from = Value) %>%
   dplyr::rename(PP.GB=GB,
                 PP.GOM=GOM,
                 PP.MAB=MAB)
-# Zooplankton  ------------------------------------------------------------
 
+# Now calculate area weighted annual averages
+ppd <- PPD%>%
+  dplyr::group_by(year) %>%
+  dplyr::summarise(PPD=weighted.mean(Value, W.h, na.rm = TRUE))
+
+# Plot production variables and predation -----------------------------------------------
+ts.ChlAan  <- ggplot(Chla, aes(x = year, y = ChlA))  + 
+  theme_bw() +  
+  geom_line(na.rm = T, size = 1) +
+  xlab("Year") +
+  ylab("Chlorophyll a (mg/m3)")
+
+ts.PPDan  <- ggplot(ppd, aes(x = year, y = PPD))  + 
+  theme_bw() +  
+  geom_point() +
+  geom_line(size = 1) +
+  xlab("Year") +
+  ylab("Primary Production (gC/m2/day)")
+
+ts.PPDreg  <- ggplot(PPD, aes(x = year, y = Value, group = EPU, col = EPU))  + 
+  theme_bw() +  
+  geom_point() +
+  geom_line(size = 1) +
+  xlab("Year") +
+  ylab("Primary Production (gC/m2/day)")
+
+# Combine and save
+tiff("ts.PrimaryProd.tiff", width = 5, height = 5, units = 'in', res = 300)
+ggarrange(ts.ChlAan, ts.PPDan, ts.PPDreg)
+dev.off()
+
+# Predators
+ts.hadSSB  <- ggplot(predators, aes(x = year, y = HadSSB_GoM))  + 
+  theme_bw() +  
+  geom_point() +
+  geom_line(size = 1, na.rm = T) +
+  xlab("Year") +
+  ylab("GoM Haddock SSB (metric tons)")
+
+ts.mackSSB  <- ggplot(predators, aes(x = year, y = MackSSB))  + 
+  theme_bw() +  
+  geom_point() +
+  geom_line(size = 1, na.rm = T) +
+  xlab("Year") +
+  ylab("Atlantic Mackerel SSB (metric tons)")
+
+tiff("ts.Predators.tiff", width = 5, height = 5, units = 'in', res = 300)
+ggarrange(ts.mackSSB, ts.hadSSB)
+dev.off()
+
+# PLANKTON  ------------------------------------------------------------
+
+# 1. Calanus stages -------------------------------------------------------
 # Load calanus r data, save as object, modify and summarize
-head(calanus_stage)
-copepod <- calanus_stage
-copepod <- copepod%>%
-  mutate_if(is.character, as.factor)%>%
-  dplyr::filter(EPU%in% c("GOM", "SS", "GB"))%>% # Select the spawning regions only
-  dplyr::group_by(Time, Var) %>% # what are cutoff dates for seasons (6 total var's are stage and season combined)
-  dplyr::summarise(Anmean = mean(Value, na.rm = TRUE))%>%
-  as.data.frame()
+# Use newer version called CalanusStage (b/c it has more copepodites)
+str(calanus_stage)
+str(CalanusStage)
 
-# split up by season and stage, get regional annual averages for both stages
-cope <- copepod %>%
-  separate(Var, c("Stage","Season"), sep = "-", remove = T,  convert = T, extra = "merge")
+# Newest data (4 stages, sep columns) 
+calanus <- CalanusStage%>%
+  dplyr::rename(EPU=epu)%>%
+  left_join(Weights, by="EPU")
 
-# now summarize across all seasons for both adults,  stage c5, and both (later in the process might want to keep seasons)
-cope.adult <- cope%>%
-  dplyr::filter(Stage==c("adt"))%>%
-  group_by(Time)%>%
-  dplyr::summarise(CalAD = mean(Anmean))%>%
-  dplyr::rename(year=Time)
+# Check data
+table(calanus$season)
+table(calanus$Year)
+# Number of samples per year and season are even
 
-cope.c5 <- cope%>%
-  dplyr::filter(Stage==c("c5"))%>%
-  group_by(Time)%>%
-  dplyr::summarise(CalC5 = mean(Anmean))%>%
-  dplyr::rename(year=Time)
+#Calculate annual abundance for each stage (area weighted) (these are already log transformed)
+Cal.adult <- calanus%>%
+  dplyr::filter(Var==c("Adt"))%>%
+  group_by(Year)%>%
+  dplyr::summarise(CalAD = weighted.mean(Value, W.h, na.rm = TRUE))%>%
+  dplyr::rename(year=Year)
+Cal.c5 <- calanus%>%
+  dplyr::filter(Var==c("CV"))%>%
+  group_by(Year)%>%
+  dplyr::summarise(CalC5 = weighted.mean(Value, W.h, na.rm = TRUE))%>%
+  dplyr::rename(year=Year)
+Cal.c4 <- calanus%>%
+  dplyr::filter(Var==c("CIV"))%>%
+  group_by(Year)%>%
+  dplyr::summarise(CalC4 = weighted.mean(Value, W.h, na.rm = TRUE))%>%
+  dplyr::rename(year=Year)
+Cal.c3 <- calanus%>%
+  dplyr::filter(Var==c("CIII"))%>%
+  group_by(Year)%>%
+  dplyr::summarise(CalC3 = weighted.mean(Value, W.h, na.rm = TRUE))%>%
+  dplyr::rename(year=Year)
 
-cope.Ann <- copepod%>%
-  group_by(Time)%>%
-  dplyr::summarise(CalAbun = mean(Anmean))%>%
-  dplyr::rename(year=Time)
+# join
+Cal.An1 <- merge(Cal.adult, Cal.c5, by="year")
+Cal.An2 <- merge(Cal.c4, Cal.c3, by="year")
+Cal.Stage.An <- merge(Cal.An1, Cal.An2, by="year")
 
-cope.reg <- calanus_stage%>%
-  dplyr::filter(EPU%in% c("GOM", "SS", "GB"))%>% # Select the spawning regions only
-  group_by(Time, EPU)%>%
-  dplyr::summarise(CalAbun = mean(Value))%>%
-  dplyr::rename(year=Time)
+# Prepare to calculate annual weighted abundances (Create separate object with stage weights)
+calanus.prop <- calanus%>%
+  dplyr::filter(!Units==c("No. per 100m^-3"))
+  
+# Create separate object with just abundance
+calanus.conc <- calanus%>%
+  dplyr::filter(Units==c("No. per 100m^-3"))%>%
+  dplyr::rename(Abun = Value)
 
-# Pivot and rename for merge
-c.reg <- pivot_wider(cope.reg, names_from = EPU, values_from = CalAbun) 
-c.reg <- c.reg %>%
-  dplyr::rename(Cal.GB=GB,
-                Cal.GOM=GOM,
-                Cal.SS=SS)
+# Now rejoin these
+calanus2 <- cbind(calanus.conc, calanus.prop)
+calanus2 <- calanus2%>%
+  dplyr::select(1,2,3,4,5,8, 13)%>%
+  dplyr::rename(Percent = Value)
 
-# 5 other Rdata files for zooplankton
-# 1. abundance
-head(zoo_abund) # regional abundance
-range(zoo_abund$Value) # weird this one has negative values, don't use
-# 2. diversity (diversity index, nah)
-# 3. oi
-head(zoo_oi) # regional density by calanus family and season (centropages, pseudocalanus, temora) with sd
+# Add a new column with the sum of the weighted abundance (seasonal, regional average of all stages)
+Cal.wts <- calanus2%>%
+  group_by(Year,EPU, season)%>%
+  dplyr::summarise(WeightedSum = sum(Abun*(Percent/100)))
+
+# split up by season
+Cal.Fall <- Cal.wts%>%
+  dplyr::filter(season==c("Fall"))
+Cal.Summer <- Cal.wts%>%
+  dplyr::filter(season==c("Summer"))
+Cal.Spring <- Cal.wts%>%
+  dplyr::filter(season==c("Spring"))
+
+# pivot to merge --> haven't done
+
+# Calculate regional means across the three seasons for all stages
+Cal.Reg <- Cal.wts%>%
+  group_by(Year,EPU)%>%
+  dplyr::summarise(Cal.RegAbun = mean(WeightedSum))
+
+# pivot to merge --> haven't done
+
+# Calculate area weighted basin wide mean for all stages
+Cal.An <- Cal.wts%>%
+  left_join(Weights, by="EPU")%>%
+  group_by(Year)%>%
+  dplyr::summarise(Cal.AnAbun = weighted.mean(WeightedSum, W.h, na.rm = TRUE))%>%
+  dplyr::rename(year=Year)
+
+#   Plot Calanus finmarchicus time series -----------------------------------
+# Plot seasonal trends for all stages with colors for EPU
+ts.Cal.Fall <- ggplot(Cal.Fall, aes(x=Year, y = log(WeightedSum), group=EPU, color=EPU))+
+  geom_line()+
+  geom_point()+
+  #facet_grid(.~EPU)+
+  ggtitle("Fall")
+
+ts.Cal.Spring <- ggplot(Cal.Spring, aes(x=Year, y = log(WeightedSum), group=EPU, color=EPU))+
+  geom_line()+
+  geom_point()+
+  #facet_grid(.~EPU)+
+  ggtitle("Spring")
+
+ts.Cal.Summer <- ggplot(Cal.Summer, aes(x=Year, y = log(WeightedSum), group=EPU, color=EPU))+
+  geom_line()+
+  geom_point()+
+  #facet_grid(.~EPU)+
+  ggtitle("Summer")
+
+# Combine and save
+tiff("TS Seasonal, Regional Calanus Stages.tiff", width = 8, height = 8, units = 'in', res = 300)
+ggarrange(ts.Cal.Fall, ts.Cal.Spring, ts.Cal.Summer)
+dev.off()
+
+# Mean annual calanus finmarchicus abundance by stage 
+# First pivot to make plotting easier
+Cal.StageAn <- pivot_longer(Cal.Stage.An, cols = c(CalAD, CalC5, CalC4, CalC3),
+                            names_to = "names", values_to = "value")
+ts.Cal.Stage  <- ggplot(Cal.StageAn, aes(x = year, y = value, color = names))  + 
+  theme_bw() +  
+  geom_line(na.rm = T, size=1)+
+  xlab("Year") +
+  ylab("Calanus finmarchicus Abundance")
+
+# Mean annual calanus finmarchicus abundance by region 
+ts.Cal.Reg  <- ggplot(Cal.Reg, aes(x = Year, y = Cal.RegAbun, color = EPU))  + 
+  theme_bw() +  
+  geom_line(na.rm = T, size=1)+
+  xlab("Year") +
+  ylab("Calanus finmarchicus Abundance")
+
+# Mean annual calanus finmarchicus abundance
+ts.Cal.An <- ggplot(Cal.An, aes(x = year, y = Cal.AnAbun))  + 
+  theme_bw() +  
+  geom_point(na.rm = T)+
+  geom_line(na.rm = T) +
+  xlab("Year") +
+  ylab("Calanus finmarchicus Abundance")
+
+# Combine and save
+tiff("TS Calanus Stages.tiff", width = 8, height = 8, units = 'in', res = 300)
+ggarrange(ts.Cal.An, ts.Cal.Reg, ts.Cal.Stage)
+dev.off()
+
+# 2.Small Copepod Density -----------------------------------------------------
+# Load the oi (regional density) data and edit
+str(zoo_oi) # Log N/m3 by epu, family (centropages, pseudocalanus, temora), and season with sd
 levels(as.factor(zoo_oi$Var))
-# 4. anom (anomaly by region, nah)
-# 5. strat abund by region and season
-head(zoo_strat_abun) # regional abundance by taxa (euphausids, cnidaria, large and small calanoida)
 
-# Load the abundance data and edit
-zoo.numb <- zoo_strat_abun%>%
-  group_by(Time, EPU, Var)%>%
-  dplyr::summarise(ZooAbun = mean(Value))%>%
+# First split up var column into taxa and season
+Smcope.dens <- zoo_oi %>%
+  separate(Var, c("Taxon","Season"), sep = "zoo", remove = T,  convert = T, extra = "merge")%>%
+  left_join(Weights, by="EPU")%>%
+  mutate_if(is.character, as.factor)
+
+# Remove the sd factor levels in the taxon
+Smcope.dens <- Smcope.dens[Smcope.dens$Season %in% c(" fall", " spring"), ]
+Smcope.dens <- droplevels(Smcope.dens)
+
+# Calculate seasonal area weighted mean density of small copepods
+Smcope.dens.SeaAn <- Smcope.dens%>%
+  group_by(Time, Season)%>%
+  dplyr::summarise(Smcope.SeasDens = weighted.mean(Value, W.h, na.rm = TRUE))%>%
+  dplyr::rename(year=Time)%>%
+  dplyr::select(year, Season, Smcope.SeasDens)
+
+# Pivot for merging (won't let me rename)
+Smcope.dens.sea <- Smcope.dens.SeaAn%>%
+  tidyr::pivot_wider(names_from = Season, values_from = Smcope.SeasDens)
+
+# Calculate area weighted mean density of small copepods
+Smcope.dens.An <- Smcope.dens%>%
+  group_by(Time)%>%
+  dplyr::summarise(Smcope.AnDens = weighted.mean(Value, W.h, na.rm = TRUE))%>%
   dplyr::rename(year=Time)
 
-# Create another object with annual average across taxa
-zoonum_reg <- zoo.numb%>%
-  group_by(year, EPU)%>%
-  dplyr::summarise(Abund = mean(Abund))
+# Calculate regional mean density of small copepods
+Smcope.dens.Reg <- Smcope.dens%>%
+  group_by(Time, EPU)%>%
+  dplyr::summarise(Smcope.RegDens = mean(Value, na.rm = TRUE))%>%
+  dplyr::rename(year=Time)
+
+# pivot and rename to add to list of regionals
+Smcope.dens.reg <- Smcope.dens.Reg%>%
+  tidyr::pivot_wider(names_from = EPU, values_from = Smcope.RegDens)%>%
+  dplyr::rename(smCopeDen.GB=GB,
+                smCopeDen.GOM=GOM,
+                smCopeDen.MAB=MAB)
+
+#   Plot Small Copepod Density Time Series ----------------------------------
+ts.Smcope.Season <- ggplot(Smcope.dens.SeaAn, aes(year, Smcope.SeasDens, col=Season))+
+  geom_line(na.rm = T, size=1)+
+  theme_bw() +  
+  xlab("Year") +
+  ylab("Small Copepod Density (log#/m3)")
+
+ts.Smcope.Reg <- ggplot(Smcope.dens.Reg, aes(year, Smcope.RegDens, col=EPU))+
+  geom_line(na.rm = T, size=1)+
+  theme_bw() +  
+  xlab("Year") +
+  ylab("Small Copepod Density (log#/m3")
+
+ts.Smcope.An<- ggplot(Smcope.dens.An, aes(year, Smcope.AnDens))+
+  geom_line(na.rm = T, size=1)+
+  theme_bw() +  
+  xlab("Year") +
+  ylab("Small Copepod Density (log#/m3")
+
+tiff("TS.Small Copepod Density.tiff", width = 6, height = 8, units = 'in', res = 300)
+ggarrange(ts.Smcope.Reg, ts.Smcope.Season, ts.Smcope.An, nrow=2, ncol=2)
+dev.off()
+
+# 3.All Zooplankton Stratified Abundance -------------------------------------------------------------
+str(zoo_strat_abun) # region and taxa (euphausids, cnidaria, large and small calanoida)
+levels(as.factor(zoo_strat_abun$Var))
+
+# Calculate various area weighted annual values, first add weights
+zoodat <- zoo_strat_abun %>% full_join(Weights, by="EPU")
+
+# for small and large calanus
+smallcal <- zoodat%>% 
+  dplyr::filter(Var==c("SmallCalanoida"))%>%
+  dplyr::group_by(Time) %>%
+  dplyr::summarise(Sm.cal.abun = weighted.mean(Value, W.h, na.rm = TRUE))%>%
+  dplyr::rename(year=Time) %>%
+  dplyr::select(year, Sm.cal.abun)
+
+largecal <- zoodat%>% 
+  dplyr::filter(Var==c("LargeCalanoida"))%>%
+  dplyr::group_by(Time) %>%
+  dplyr::summarise(Lg.cal.abun = weighted.mean(Value, W.h, na.rm = TRUE))%>%
+  dplyr::rename(year=Time) %>%
+  dplyr::select(year, Lg.cal.abun)
+
+# regional mean for all taxa
+ZooAbun.Reg <- zoodat%>%
+  group_by(Time, EPU)%>%
+  dplyr::summarise(Abund = log(mean(Value)))
 
 # Pivot and rename for merge
-zn.reg <- pivot_wider(zoonum_reg, names_from = EPU, values_from = Abund) 
+zn.reg <- pivot_wider(ZooAbun.Reg, names_from = EPU, values_from = Abund) 
 zn.reg <- zn.reg %>%
   dplyr::rename(ZooAbun.GB=GB,
                 ZooAbun.GOM=GOM,
-                ZooAbun.MAB=MAB)
+                ZooAbun.MAB=MAB,
+                ZooAbun.SS=SS,
+                year=Time)
 
-# Calculate annual average
-zoonum_an <- zoo_strat_abun%>%
+# Calculate annual weighted average for all taxa
+ZooAbun.An.Wt <- zoodat%>%
   group_by(Time)%>%
-  dplyr::summarise(ZooAbun = mean(Value))%>%
-  dplyr::rename(year=Time)
+  dplyr::summarise(ZooAbun = log(weighted.mean(Value, W.h, na.rm = TRUE)))%>%
+  dplyr::rename(year=Time)%>%
+  dplyr::select(year, ZooAbun)
 
-# Load the oi (regional density) data and edit
-# First split up var column by species and season
-zoo.den <- zoo_oi %>%
-  separate(Var, c("Taxon","Season"), sep = "zoo", remove = T,  convert = T, extra = "merge")
-
-zoo.den <- zoo.den%>%
-  mutate_if(is.character, as.factor)%>%
-  group_by(Time, EPU, Taxon, Season)%>%
-  dplyr::summarise(Dens = mean(Value))%>%
-  dplyr::rename(year=Time)
-
-# Remove the sd factor levels in the taxon
-zoo.den <- zoo.den[zoo.den$Season %in% c(" fall", " spring"), ]
-zoo.den <- droplevels(zoo.den)
-
-# Grouping 
-# First get regional annual average for all Calanus taxa
-zooden_reg <-zoo.den%>%
-  group_by(year, EPU)%>%
-  dplyr::summarise(Density = mean(Dens))
-
-# repeat across all regions
-zooden_an <-zoo.den%>%
-  group_by(year)%>%
-  dplyr::summarise(ZooDens = mean(Dens))
-
-# Then compute average density by region by species (average across season))
-zooden <- zoo.den%>%
-  group_by(year, EPU, Taxon)%>%
-  dplyr::summarise(Dens = mean(Dens))
-
-# Plot biological variables -----------------------------------------------
-prim  <- ggplot(PP, aes(x = year, y = Value, col = EPU))  + 
+#   Plot Zooplankton Time Series --------------------------------------------
+# Panels for taxonomic groups with colors for EPU
+ts.ZooReg.Taxa <- ggplot(na.omit(zoodat), aes(Time, log(Value), col=EPU))+
+  geom_line(na.rm = T, size=1)+
   theme_bw() +  
-  geom_point() +
-  geom_line(size = 2) +
+  facet_wrap(~Var)+
   xlab("Year") +
-  ylab("Primary Production (gC/m2/day")
+  ylab("Log Zooplankton Abundance (#)")
 
-# Zooplankton abundance
-zooabun_an <- ggplot(zoo.num.an, aes(x = year, y = log(Abund)))  + 
+# Mean Annual Zooplankton Abundance by Region
+ts.ZooReg <- ggplot(na.omit(ZooAbun.Reg), aes(x = Time, y = Abund, col=EPU, group=EPU))  + 
   theme_bw() +  
   geom_point()+
-  geom_line(na.rm = T, size = 2)+
+  geom_line(na.rm = T)+
   xlab("Year") +
-  ylab("Zooplankton Abundance (log(Number)")
+  ylab("Log Zooplankton Abundance (#)")
 
-zooabun <- ggplot(zoo.num.reg, aes(x = year, y = log(Abund), col = EPU))  + # use log so scale is easily visible
+# Mean Annual Zooplankton Abundance (area weighted)
+ts.ZooAn <- ggplot(ZooAbun.An.Wt, aes(x = year, y = ZooAbun))  + 
   theme_bw() +  
   geom_point()+
-  geom_line(na.rm = T, size = 2)+
+  geom_line(size=1, na.rm = T)+
   xlab("Year") +
-  ylab("Zooplankton Abundance (log(Number)")
+  ylab("Log Zooplankton Abundance (#)")
 
-zooabun2 <- ggplot(zoo.numb, aes(x = year, y = log(Abund), col = Var))  + # use log so scale is easily visible
+# Mean Annual Large Calanoida Abundance (area weighted)
+ts.LgCope <- ggplot(largecal, aes(x = year, y = Lg.cal.abun))  + 
   theme_bw() +  
   geom_point()+
-  geom_line(na.rm = T, size = 2)+
+  geom_line(size=1, na.rm = T)+
   xlab("Year") +
-  ylab("Zooplankton Abundance (log(Number)")+
-  facet_wrap(~EPU)
+  ylab("Log Abundance of Large Calanoida")
 
-ZD <- ggplot(zoo.den2, aes(x = year, y = Dens, col = Taxon))  + 
+# Mean Annual Small Calanoida Abundance (area weighted)
+ts.SmCope <- ggplot(smallcal, aes(x = year, y = Sm.cal.abun))  + 
   theme_bw() +  
   geom_point()+
-  geom_line(na.rm = T, size = 2)+
+  geom_line(size=1, na.rm = T)+
   xlab("Year") +
-  facet_wrap(vars(EPU))+
-  ylab("Zooplankton Density (#/m2/day)")
-
-ZDr <- ggplot(zooden_reg, aes(x = year, y = Density, col = EPU))  + 
-  theme_bw() +  
-  geom_point()+
-  geom_line(na.rm = T, size = 2)+
-  xlab("Year") +
-  ylab("Zooplankton Density(#/m2/day)")
-
-ZDa <- ggplot(zooden_an, aes(x = year, y = ZooDens))  + 
-  theme_bw() +  
-  geom_point()+
-  geom_line(na.rm = T, size = 2)+
-  xlab("Year") +
-  ylab("Zooplankton Density(#/m2/day)")
-
-# For copepods, plot adults and c5 stage separately
-ad <- ggplot(cope.adult, aes(x = year, y = CAD))  + 
-  theme_bw() +  
-  geom_point(na.rm = F, size=3)+
-  geom_line() +
-  xlab("Year")+
-  ylab("Adult Copepod Abundance")
-
-c5 <- ggplot(cope.c5, aes(x = year, y = CC5))  + 
-  theme_bw() +  
-  geom_point(na.rm = F, size=3)+
-  geom_line() +
-  xlab("Year") +
-  ylab("C5 Copepod Abundance")
-
-# Copepods together (facet by stage with colors by season)
-cal <- ggplot(cope, aes(x = Time, y = Anmean, col=Season))  + 
-  theme_bw() +  
-  geom_point(na.rm = T)+
-  geom_line(na.rm = T) +
-  xlab("Year") +
-  ylab("Copepod Abundance")+
-  facet_wrap(~Stage)
-
-# Mean annual copepod abundance by region
-cal2 <- ggplot(cope.reg, aes(x = year, y = Cope, col = EPU))  + 
-  theme_bw() +  
-  geom_point(na.rm = T)+
-  geom_line(na.rm = T) +
-  xlab("Year") +
-  ylab("Copepod Abundance")
-
-# Mean annual copepod abundance
-
-cal3 <- ggplot(cope.Ann, aes(x = year, y = Cope))  + 
-  theme_bw() +  
-  geom_point(na.rm = T)+
-  geom_line(na.rm = T) +
-  xlab("Year") +
-  ylab("Copepod Abundance")
+  ylab("Log Abundance of Small Calanoida")
 
 # Combine and save
-tiff("Biological Variables.tiff", width = 8, height = 8, units = 'in', res = 300)
-ggarrange(zooabun_an, zooabun, zooabun2, ZDa, ZDr, ZD, cal3, c5, ad, cal, cal2, prim, nrow=4, ncol=3)
+tiff("TS.Zooplankton Abundance.tiff", width = 8, height = 8, units = 'in', res = 300)
+ggarrange(ts.SmCope, ts.LgCope, ts.ZooAn, ts.ZooReg.Taxa, ts.ZooReg, nrow=3, ncol=2)
 dev.off()
 
 # Combine Biological Variables ------------------------------------------------------
 
-# Annual and regional primary productivity 
-# Annual and regional zooplankton abundance 
-# Annual zooplankton density
-# Annual copepod (total, adult, and c5) & regional (total)
-# Taxon specific zoo abundance/density (not done)
-# Seasonal copepod (not done)
+# Predators
+# Annual (chla), annual and regional primary productivity (ppd)
+# Calanus finmarchicus (stage annual), regional (not included need to pivot), seasonal (same), area weighted basin wide mean
+# Annual zooplankton density (small copepods) annual area wtd mean, seasonal, regional
+# Annual and regional zooplankton abundance, larve & sm calanoid copepod abundance
+biovar.basin <- list(Chla, ppd, predators,
+                    Cal.Stage.An, Cal.An,
+                    Smcope.dens.sea, Smcope.dens.An,
+                    smallcal, largecal,  ZooAbun.An.Wt)
+biovar.basin <- biovar.basin %>% reduce(full_join, by='year')
 
-biovar.list <- list(zoonum_an, zn.reg, zooden_an,
-                    cope.adult, cope.c5, cope.Ann, c.reg,
-                    PP.Ann, PP.reg)
+biovar.reg <- list(PPD.reg, Smcope.dens.reg, zn.reg)
+biovar.reg <- biovar.reg %>% reduce(full_join, by='year')
 
-biovar.list <- biovar.list %>% reduce(full_join, by='year')
-
-# Trim down to the year range we want 
-biovar.list <- biovar.list  %>% 
-  dplyr::filter(between(year,1982,2018))
+# Trim down to the year range we want --> not yet
+#biovar.list <- biovar.list  %>% 
+  #dplyr::filter(between(year,1982,2020))
 
 # Load Recruitment Data (from ASAP model run) ---------------------------------------------------
 
@@ -763,101 +926,105 @@ for(i in 2:nrow(herring)){
 }
 
 # save as csv
-write.csv(herring, file = "ASAPdat.csv", row.names = F)
+#write.csv(herring, file = "ASAPdat.csv", row.names = F)
 
 # Plot herring recruitment indices  -------------------------------------------------------------------
-
 rec <- ggplot(herring, aes(x = year, y = recruits))  + 
   theme_bw() +  
-  geom_point(na.rm = F, size=3)+
-  geom_line() +
+  geom_point(na.rm = F)+
+  geom_line(size=1) +
   xlab("Year") +
   ylab("Recruitment")
 
 nodev <- ggplot(herring, aes(x = year, y = R.no.devs))  + 
   theme_bw() +  
-  geom_point(na.rm = F, size=3)+
-  geom_line() +
+  geom_point(na.rm = F)+
+  geom_line(size=1) +
   xlab("Year") +
   ylab("Recruitment (No devs)")
 # is this estimated from stock recruit function
 
-devs <- ggplot(herring, aes(x = year, y = logR.dev))  + 
+logdevs <- ggplot(herring, aes(x = year, y = logR.dev))  + 
   theme_bw() +  
-  geom_point(na.rm = F, size=3)+
-  geom_line() +
+  geom_point(na.rm = F)+
+  geom_line(size=1) +
   xlab("Year") +
   ylab("Log Recruitment Deviations")
 
 srresid <- ggplot(herring, aes(x = year, y = SR.std.resid))  + 
   theme_bw() +  
-  geom_point(na.rm = F, size=3)+
-  geom_line() +
+  geom_point(na.rm = F)+
+  geom_line(size=1) +
   xlab("Year") +
   ylab("Stock-Recruit Residuals (Standardized)")
 
 ssb <- ggplot(herring, aes(x = year, y = SSB))  + 
   theme_bw() +  
-  geom_point(na.rm = F, size=3)+
-  geom_line() +
+  geom_point(na.rm = F)+
+  geom_line(size=1) +
   xlab("Year") +
   ylab("SSB")
 
 SPR <-  ggplot(herring, aes(x = year, y = SPR))  + 
   theme_bw() +  
-  geom_point(na.rm = F, size=3)+
-  geom_line() +
+  geom_point(na.rm = F)+
+  geom_line(size=1) +
   xlab("Year") +
-  ylab("Spawner per Recruit")
+  ylab("Spawner per Recruit (SSBt/Rt")
 
 Rs <- ggplot(herring, aes(x = year, y = Rs))  + 
   theme_bw() +  
-  geom_point(na.rm = F, size=3)+
-  geom_line() +
+  geom_point(na.rm = F)+
+  geom_line(size=1) +
   xlab("Year") +
-  ylab("Spawning Success")
+  ylab("Spawning Success (Rt/SSBt-1")
 
 # Combine and save
 tiff("Recruitment Indices.tiff", width = 8, height = 6, units = 'in', res = 300)
-ggarrange(ssb, rec, SPR, srresid, devs, nodev, Rs)
+ggarrange(ssb, rec, SPR, srresid,  nodev, Rs, logdevs)
 dev.off()
 
-# Join biological and environmental covariates to herring data (don't use these) -----------------------------------------
-vars <- merge(physvar.list, biovar.list ,
+# Join biological and environmental covariates  -----------------------------------------
+basin.vars <- merge(physvar.basin, biovar.basin,
                       by = "year", 
                       all.x = TRUE, all.y = T)
-multivariate <- merge(herring, vars,
-        by = "year", 
-        all.x = TRUE, all.y = T)
+reg.vars <- merge(physvar.reg, biovar.reg,
+                    by = "year", 
+                    all.x = TRUE, all.y = T)
+write.csv(basin.vars, file = "Basin wide biophys variables.csv", row.names = F)
+write.csv(reg.vars, file = "Regional biophys variables.csv", row.names = F)
+# Old variable lists ------------------------------------------------------
+# Join to herring data, don't use this b/c add lags first, then join
+#multivariate <- merge(herring, vars, by = "year", all.x = TRUE, all.y = T)
 
 # Trim off some years 
-multivariate <- multivariate %>% 
-  filter(between(year,1982,2018))
+#multivariate <- multivariate %>% 
+  #filter(between(year,1982,2018))
 
 # Save as a csv
-write.csv(multivariate, file = "combined.data.csv", row.names = F)
+#write.csv(multivariate, file = "combined.data.csv", row.names = F)
 
 # Pull out primary production variables and salinity (need a shorter time series for those)
-multi.short <- multivariate%>% 
-  select(year, OISST, BT, SST, Surv.SST, Surv.BT, 
-         BT.GOM, BT.GB, BT.MAB , BT.SS, 
-         SST.GOM, SST.GB, SST.MAB , SST.SS, 
-         GSI, CP, HW, HW.GB, HW.GOM, HW.MAB,
-         Abund, Num.GB, Num.GOM, Num.MAB, ZooDens, CAD, CC5, Cope,
-         recruits, SPR, logR.dev, Rs)
+#multi.short <- multivariate%>% 
+  #select(year, OISST, BT, SST, Surv.SST, Surv.BT, 
+         #BT.GOM, BT.GB, BT.MAB , BT.SS, 
+         #SST.GOM, SST.GB, SST.MAB , SST.SS, 
+         #GSI, CP, HW, HW.GB, HW.GOM, HW.MAB,
+         #Abund, Num.GB, Num.GOM, Num.MAB, ZooDens, CAD, CC5, Cope,
+         #recruits, SPR, logR.dev, Rs)
 
 # Create a smaller version of variable list (no redundant survey data (anomalies vs raw, just use raw))
-var.list <- list(OISST.Annual, OISST.reg, Survey.Annual.weighted, SurvBT.Regional, SurvSST.Regional, 
-                 Fall, Spring,
-                 HW.Annual, HW.reg, GSI.Annual, CP, PP.Ann, PP.reg,
-                 zoonum_an, zn.reg, zooden_an,cope.adult, cope.c5, cope.Ann, c.reg, had) 
-var.list <- var.list %>% reduce(full_join, by='year')
-var.list <- var.list%>% 
+#var.list <- list(OISST.Annual, OISST.reg, Survey.Annual.weighted, SurvBT.Regional, SurvSST.Regional, 
+                 #Fall, Spring,
+                 #HW.Annual, HW.reg, GSI.Annual, CP, PP.Ann, PP.reg,
+                 #zoonum_an, zn.reg, zooden_an,cope.adult, cope.c5, cope.Ann, c.reg, had) 
+#var.list <- var.list %>% reduce(full_join, by='year')
+#var.list <- var.list%>% 
   #dplyr::select(-Surv.SSS, -Surv.BS) %>% 
-  dplyr::filter(between(year,1982,2018))
-write.csv(var.list, file = "Data/variables.csv", row.names = F)
+  #dplyr::filter(between(year,1982,2018))
+#write.csv(vars, file = "Data/variables.csv", row.names = F)
 
-# Auto Correlation ---------------------------------------------------------
+# Auto Correlation (not updated)---------------------------------------------------------
 
 # convert full dataset to long form, 
 multi.long <- multivariate %>% 
@@ -899,7 +1066,7 @@ bio.melt %>%
                        .value = value,
                        .show_white_noise_bars = T, .facet_ncol = 2)
 
-# Combined correlation matrix ---------------------------------------------
+# Combined correlation matrix (not updated) ---------------------------------------------
 
 # Create correlation matrix
 cormat <- melt(cor(as.data.frame(multivariate), use="na.or.complete"))
@@ -930,7 +1097,7 @@ cor1 <- ggplot(data = cormat, aes(Var2, Var1, fill = value))+
 cor2pcor(m, tol)
 pcor2cor(m, tol)
 
-# Grouped correlation matrices --------------------------------------------
+# Grouped correlation matrices (not updated) --------------------------------------------
 
 ## Repeat for just SST variables and recruitment INDICES
 temps <- multivariate%>% 

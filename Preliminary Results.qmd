@@ -30,20 +30,27 @@ library(ggcorrplot)
 
 ## Load data
 
-The combined dataset being loaded in here came from various sources (mostly NOAA ecodata github) and were modified, summarized, compiled and exported in a separate script.
+The combined dataset here came from various sources (mostly NOAA ecodata github) and were modified, summarized, compiled and exported in a separate script.
 
--   SST & BT raw data came from the NMFS survey and were clipped to EPU regions
-    -   Annual survey derived SST and BT were area weighted
--   Annual and/or regional environmental indices came from ecodata
-    1.  Heatwave index (missing some years)
-
+-   SST, BT, SSS & BS raw data came from the NMFS survey and were clipped to EPU regions (based on Sean Lucey survdat package)
+    -   Basin wide annual values were computed as area weighted means
+    -   Regional annual means were also included
+    -   Seasonal basin wide values were computed as area weighted means
+-   Environmental indices came from ecodata
+    1.  Heatwave index (Basin wide area weighted mean and regional means)
     2.  Cold Pool index
-
     3.  Gulf Stream Index
--   Various zooplankton indices include abundance, density, and calanus copepod abundance
--   Recruitment indices came from 2022 ASAP model
--   Other indices, such as salinity and chlorophyll might require a separate analysis b/c time series are shorter, but they are included in preliminary runs here
--   Haddock index is the retrospective adjusted SSB from the GoM Haddock 2019 assessment
+-   Food
+    -   Abundance of calanus finmarchicus stages (C3-adult) with season and region variables
+    -   Zooplankton abundance by region and taxa (cnidaria, euphausids, small calanoid, large calanoid)
+    -   Density of small zooplankton by region, season and taxa (centropages, pseudocalanus & temora)
+-   Predators
+    -   Haddock index is the retrospective adjusted SSB from the GoM Haddock 2019 assessment (need to update with 2022 numbers)
+    -   Mackerel SSB is from the 2021 assessment
+-   Biological indices
+    -   Chlorophyll a (basin wide area weighted)
+    -   Primary production (basin wide and regional)
+-   Herring recruitment indices came from 2022 ASAP model
 
 ```{r}
 #| label: Load data
@@ -51,18 +58,19 @@ The combined dataset being loaded in here came from various sources (mostly NOAA
 #| echo: false
 
 # Load in the biological and physical variables 
-vars <- read.csv(file = 'Data/variables.csv', header=T)
+basin.vars <- read.csv(file = 'Data/Basin wide biophys variables.csv', header=T)
+reg.vars <- read.csv(file = 'Data/Regional biophys variables.csv', header=T)
 
 # Load the herring data
 ts.recr <- read.csv(file='Data/ASAPdat.csv', header=T)
 
 # Combine
-dat <- merge(ts.recr, vars,by = "year")
+#dat <- merge(ts.recr, vars,by = "year")
 ```
 
 ## Preliminary plots
 
-Plot time series of possible variables and correlation matrices.
+Plot time series of possible variables and correlation matrices
 
 ```{r}
 #| label: Fig Recruit 
@@ -71,9 +79,9 @@ Plot time series of possible variables and correlation matrices.
 
 herr.rec <- dat%>% 
   dplyr::select(year, recruits, R.no.devs, logR.dev, SR.std.resid, SSB, SPR,  Rs)
-herr.rec2 <- reshape2::melt(herr.rec, id.vars="year", variable.name="series")
+herr.rec <- reshape2::melt(ts.recr, id.vars="year", variable.name="series")
 
-ggplot(herr.rec2, aes(year,value)) +
+ggplot(herr.rec, aes(year,value)) +
   geom_line()+ 
   theme_bw()+
   facet_wrap(~ series, scales = "free")
@@ -84,6 +92,8 @@ ggstatsplot::ggcorrmat(
   colors = c("darkred", "white", "steelblue"))
 
 ```
+
+![](Figures/Recruitment%20Indices.tiff)
 
 ### Trends in recruitment variables:
 
@@ -96,7 +106,7 @@ ggstatsplot::ggcorrmat(
 | **log Recruitment success (Recruits(t)/SSB(t-1):** increased throughout the 80s and 90s, declined in 1990 to intermediate levels, then declined sharply after 2010 to 2018 and has since risen (Only significantly correlated with year)
 
 ```{r}
-#| label: Code Generate temp figures
+#| label: Code temp figures
 #| include: true
 #| echo: false
 
@@ -140,17 +150,11 @@ tempcor
 ### Patterns and correlations in environmental variables:
 
 -   OISST in each region is similar to the basin scale annual OISST; these were all highly correlated (drop regionals)
-
 -   OISST and survey derived SST have different patterns; not significantly correlated (keep both)
-
 -   Bottom temp and SST patterns are different, but they are correlated (keep both)
-
 -   Bottom and surface salinity are significantly correlated and patterns are broadly similar (just keep bottom)
-
 -   Seasonal (fall and spring) SST and BT patterns are different and correlated to various of the other temperature metrics, including the regionals
-
 -   Distinct regional patterns in SST and BT that also differ from the basin wide annual averages
-
     -   Although annual SST is correlated to the regional values, because MAB area is largest and it's a weighted average, this correlation is strongest (keep regionals)
 
     -   Bottom temperature is not significantly correlated to all the regional bottom temps (keep regionals)
@@ -176,14 +180,11 @@ ggstatsplot::ggcorrmat(
 
 ### Patterns and correlations in environmental indices:
 
-**HW**: Lots of missing data in heatwave index, generally low in 80s-2000s, sharp increase around 2010 and high but varying intensity in last ten years (significantly correlated with other indices)
-
--   Regional patterns broadly similar to each other and to annual (all significantly correlated)
--   SPR significantly correlated to HW (& GB heatwave)
-
-**GSI:** Periodic variation from 80s-2000s, increase since 2010
-
-**Cold Pool:** highly variable, more positive years since 2010
+-   **HW**: Lots of missing data in heatwave index, generally low in 80s-2000s, sharp increase around 2010 and high but varying intensity in last ten years (significantly correlated with other indices)
+    -   Regional patterns broadly similar to each other and to annual (all significantly correlated)
+    -   SPR significantly correlated to HW (& GB heatwave)
+-   **GSI:** Periodic variation from 80s-2000s, increase since 2010
+-   **Cold Pool:** highly variable, more positive years since 2010
 
 ```{r}
 #| label: Fig Biological variables
@@ -208,27 +209,18 @@ ggstatsplot::ggcorrmat(
 
 ### Patterns and correlations in biological indices:
 
-**Primary Production**: short ts, increasing from 2000-2010, slight decline since then
+-   **Primary Production**: short ts, increasing from 2000-2010, slight decline since then
+    -   Regional patterns look different from each other and annual (annual sig corr with GOM and GB; just keep annual)
+-   **Zooplankton Abundance:** Regional patterns diffrent from eacother and annual, esp MAB, all characterized by episodic spikes (only sig corr with GOM)
+-   **Zooplankton Density:** Missing several years, different patterns from abundance, was high in early 2000s, rapid decline to low levels through late 2000s, steady increase since 2010
+-   **Copepod Abundance:** Different patterns as total zooplankton abundance
+    -   Stage 5 patterns similar to the total pattern (CAD diff from CC5 and Cope, but CC5 and Cope very similar; significantly correlated)
 
--   Regional patterns look different from each other and annual (annual sig corr with GOM and GB; just keep annual)
-
-**Zooplankton Abundance:** Regional patterns diffrent from eacother and annual, esp MAB, all characterized by episodic spikes (only sig corr with GOM)
-
-**Zooplankton Density:** Missing several years, different patterns from abundance, was high in early 2000s, rapid decline to low levels through late 2000s, steady increase since 2010
-
-**Copepod Abundance:** Different patterns as total zooplankton abundance
-
--   Stage 5 patterns similar to the total pattern (CAD diff from CC5 and Cope, but CC5 and Cope very similar; significantly correlated)
-
--   Regional patterns differ (scotian shelf data missing many years), but GOM looks most similar to the total copepod abundance (GOM sig corr to total copepod abundance)
-
-**GB zooplankton abundance was significantly correlated to recruitment success**
-
--   Keep regional calanus abundance and regional zooplankton abundances but drop density and abundance
-
-**Haddock SSB**
-
--   Was low for most of the time series and increased rapidly around 2010
+    -   Regional patterns differ (scotian shelf data missing many years), but GOM looks most similar to the total copepod abundance (GOM sig corr to total copepod abundance)
+-   **GB zooplankton abundance was significantly correlated to recruitment success**
+    -   Keep regional calanus abundance and regional zooplankton abundances but drop density and abundance
+-   **Haddock SSB**
+    -   Was low for most of the time series and increased rapidly around 2010
 
 ## Add lags
 
@@ -281,7 +273,7 @@ herr <- ts.recr%>%
 dat2 <- merge(herr, ts.vars,by = "year")
 lagdat <- cbind(dat2,lag1,lag2, lag3)
 brtdat <- data.frame(lagdat)
-ncol(brtdat)
+head(brtdat)
 ```
 
 ### Run Boosted Regression Trees
@@ -458,7 +450,7 @@ plot(pdpz)
 
 Problematically, the partial dependence of the top two variables, which represent food abundance, are counter to expectations. Lower calanus and total zooplankton abundance was related to higher Rs. Not sure how to handle that because 80% seems really high for one variable.
 
-### Simpler BRTs 
+### Simpler BRTs
 
 I also ran models with larger and even smaller datasets
 
