@@ -57,14 +57,8 @@ The data loaded in below was modified, summarized, compiled and exported in a se
 #| include: true
 #| echo: false
 
-# Load in the biological and physical variables (need to recombined these)
-
-
-# Load the herring data
-ts.recr <- read.csv(file='Data/ASAPdat.csv', header=T)
-
-# Combine - not yet
-#dat <- merge(ts.recr, vars,by = "year")
+# Load in the combined data 
+dat <- read.csv(file='Data/Combined.Data.csv', header=T)
 ```
 
 ## Preliminary plots
