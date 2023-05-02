@@ -1,5 +1,5 @@
 ---
-title: "Preliminary Results"
+title: "Boosted Regression Trees: Preliminary Results"
 author: "Adelle Molina"
 format:
   pdf:
@@ -26,45 +26,44 @@ library(tidyr)
 library(dismo)
 library(gridExtra)
 library(ggcorrplot)
+library(ggpubr)
 ```
 
 ## Load data
 
-The combined dataset here came from various sources (mostly NOAA ecodata github) and were modified, summarized, compiled and exported in a separate script.
+The data loaded in below was modified, summarized, compiled and exported in a separate script
 
--   SST, BT, SSS & BS raw data came from the NMFS survey and were clipped to EPU regions (based on Sean Lucey survdat package)
-    -   Basin wide annual values were computed as area weighted means
-    -   Regional annual means were also included
-    -   Seasonal basin wide values were computed as area weighted means
--   Environmental indices came from ecodata
-    1.  Heatwave index (Basin wide area weighted mean and regional means)
+-   OISST
+-   Bottom Temperature: high resolution daily composite product from four ocean models (as in du Pontavice et al. 2023)
+-   Environmental indices
+    1.  Heatwave index
     2.  Cold Pool index
     3.  Gulf Stream Index
+    4.  Warm Slope Water proportion
 -   Food
-    -   Abundance of calanus finmarchicus stages (C3-adult) with season and region variables
-    -   Zooplankton abundance by region and taxa (cnidaria, euphausids, small calanoid, large calanoid)
-    -   Density of small zooplankton by region, season and taxa (centropages, pseudocalanus & temora)
+    -   Abundance of calanus finmarchicus stage C5 in the GoM in fall
+    -   Total zooplankton abundance (cnidaria, euphausids, small calanoid, large calanoid)
+        -   small calanoids included separately as are cnidarians
 -   Predators
     -   Haddock index is the retrospective adjusted SSB from the GoM Haddock 2019 assessment (need to update with 2022 numbers)
     -   Mackerel SSB is from the 2021 assessment
 -   Biological indices
-    -   Chlorophyll a (basin wide area weighted)
-    -   Primary production (basin wide and regional)
--   Herring recruitment indices came from 2022 ASAP model
+    -   Chlorophyll a
+    -   Primary production
+-   Herring recruitment indices from 2022 assessment
 
 ```{r}
 #| label: Load data
 #| include: true
 #| echo: false
 
-# Load in the biological and physical variables 
-basin.vars <- read.csv(file = 'Data/Basin wide biophys variables.csv', header=T)
-reg.vars <- read.csv(file = 'Data/Regional biophys variables.csv', header=T)
+# Load in the biological and physical variables (need to recombined these)
+
 
 # Load the herring data
 ts.recr <- read.csv(file='Data/ASAPdat.csv', header=T)
 
-# Combine
+# Combine - not yet
 #dat <- merge(ts.recr, vars,by = "year")
 ```
 
@@ -90,61 +89,83 @@ ggstatsplot::ggcorrmat(
   data = herr.rec,
   type = "nonparametric", 
   colors = c("darkred", "white", "steelblue"))
-
 ```
-
-![](Figures/Recruitment%20Indices.tiff)
 
 ### Trends in recruitment variables:
 
-| **Recruits:** Large fluctuations, no strong year classes since 2012 and lowest numbers on record
-| **Recruitment no deviations:** increased rapidly early in the time series and has remained high throughout (this is based on the stock recruit function, right?)
-| **Log Recruitment Deviations:** Lots of interannual variability, but was generally hovering around zero, since 2010 has been lower than time series average (no sig correlations). Deviations from stock recruit function are larger in recent years.
-| **Stock Recruit Standardized Residuals**: Same pattern as log deviations with shifted scale
-| **SSB**: Trimmed data misses high biomass in 70s before decline, from lows in 80s, increase into the 2000s, then steady decline to 2010 and since relatively low (no sig correlations)
-| **Spawner per recruit vector**: Was high in the 70s-early 80s, declined sharply from 1980-2000 and has since been low. This means that the proportion of fish that reach maturity has declined (sig correlation with year and GB BT)
-| **log Recruitment success (Recruits(t)/SSB(t-1):** increased throughout the 80s and 90s, declined in 1990 to intermediate levels, then declined sharply after 2010 to 2018 and has since risen (Only significantly correlated with year)
+| **Recruits:** Steady decline since the 90s, strong year classes every 2-3 years, but none since 2012
+| **Recruitment no deviations:** start high, fast drop, increase then stable, large recent decline
+| **Log Recruitment Deviations:** High interannual variability, but was hovering around zero and then declining since the 90s. Deviations from stock recruit function are more negative in current decade, but has increased in the last 5 years
+| **Stock Recruit Standardized Residuals**: Same as log deviations
+| **SSB**: Very high biomass in 70s before rapid decline, from lows in 80s, very slow increase until late 90s, then steady decline since 2000
+| **Spawning potential ratio**: Was high in the 70s-early 80s, declined sharply from 1980-2000 and has since been low. This means that fishing is affecting the lifetime reproductive potential of an "average" individual
+| **log Recruitment success (Recruits(t)/SSB(t-1):** increased throughout the 80s and 90s, declined in 1990 to intermediate levels in the 2000s, and, then declined sharply after 2010 to 2015 and has since risen back to relatively high levels
 
 ```{r}
-#| label: Code temp figures
+#| label: Code Env Vars Figs
 #| include: true
 #| echo: false
 
-# Temperature
-temp.dat <- dat%>% 
-  dplyr::select(year, c(names(dat)[9:29]),SPR, logR.dev, Rs, SSB)
-temps.melt <- reshape2::melt(temp.dat, id.vars="year", variable.name="series")
+basin.env <- basin.vars%>% 
+  dplyr::select(year, WSW, CP, GSI, HW, SpBT, SpSST, FaBT, FaSST, BS, BT, SSS, SST, OISST) 
+basin.melt <- melt(basin.env, id.vars="year", variable.name="series")
 
-tempts <- ggplot(temps.melt, aes(year,value)) +
+ts.env.vars <- ggplot(basin.melt, aes(year,value)) +
   geom_line()+ 
   theme_bw()+
   facet_wrap(~ series, scales = "free", ncol=4)
-
-tempcor <- ggstatsplot::ggcorrmat(
-  data = temp.dat,
+cor.env <-ggstatsplot::ggcorrmat(
+  data = basin.env,
   type = "nonparametric", 
   colors = c("darkred", "white", "steelblue"))
 
+bio.dat <- basin.vars%>% 
+  dplyr::select(year,ChlA, PPD, HadSSB_GoM, MackSSB, CalAD, CalC5, CalC4, CalC3, Cal.AnAbun, Smcope.Falldens, Smcope.Springdens, Smcope.AnDens, Sm.cal.abun, Lg.cal.abun, ZooAbun)
+bio.melt <- melt(bio.dat, id.vars="year", variable.name="series")
+ts.bio.vars <- ggplot(bio.melt, aes(year,value)) +
+  geom_line()+ 
+  theme_bw()+
+  facet_wrap(~ series, scales = "free", ncol=4)
+cor.bio <-ggstatsplot::ggcorrmat(
+  data = bio.dat,
+  type = "nonparametric",
+  colors = c("darkred", "white", "steelblue"))
 ```
 
 ```{r}
-#| label: Fig Temperature TS
+#| label: Fig TS Basin Wide Environmental Variables
 #| include: true
 #| echo: false
-#| fig-width: 8
-#| fig-height: 11
-
-tempts
+#| fig-width: 7
+#| fig-height: 9
+ts.env.vars
 ```
 
 ```{r}
-#| label: Fig Temperature Corr
+#| label:  Fig Corr Matrix Environmental Vars 
 #| include: true
 #| echo: false
-#| fig-width: 8
-#| fig-height: 11
+#| fig-width: 7
+#| fig-height: 9
+cor.env
+```
 
-tempcor
+```{r}
+#| label: Fig TS Basin Wide Biological Vars
+#| include: true
+#| echo: false
+#| fig-width: 7
+#| fig-height: 9
+ts.bio.vars
+```
+
+```{r}
+#| label: Fig Corr Matrix Biological Vars
+#| include: true
+#| echo: false
+#| fig-width: 7
+#| fig-height: 9
+cor.bio
 ```
 
 ### Patterns and correlations in environmental variables:
@@ -159,25 +180,6 @@ tempcor
 
     -   Bottom temperature is not significantly correlated to all the regional bottom temps (keep regionals)
 
-```{r}
-#| label: Fig Environmental Indices
-#| include: true
-#| echo: false
-
-# Environmental Indices
-env.dat<- dat%>% 
-  dplyr::select(year, c(names(dat)[30:35]),SPR, logR.dev, Rs, SSB)
-env.melt <- reshape2::melt(env.dat, id.vars="year", variable.name="series")
-ggplot(env.melt, aes(year,value)) +
-  geom_line()+ 
-  theme_bw()+
-  facet_wrap(~ series, scales = "free", ncol=4)
-ggstatsplot::ggcorrmat(
-  data = env.dat,
-  type = "nonparametric", 
-  colors = c("darkred", "white", "steelblue"))
-```
-
 ### Patterns and correlations in environmental indices:
 
 -   **HW**: Lots of missing data in heatwave index, generally low in 80s-2000s, sharp increase around 2010 and high but varying intensity in last ten years (significantly correlated with other indices)
@@ -185,27 +187,6 @@ ggstatsplot::ggcorrmat(
     -   SPR significantly correlated to HW (& GB heatwave)
 -   **GSI:** Periodic variation from 80s-2000s, increase since 2010
 -   **Cold Pool:** highly variable, more positive years since 2010
-
-```{r}
-#| label: Fig Biological variables
-#| include: true
-#| echo: false
-#| fig-width: 8
-#| fig-height: 11
-
-## # Biological 
-bio.dat <- dat%>% 
-  dplyr::select(year,  c(names(dat)[36:51]),SPR, logR.dev, Rs, SSB)
-bio.melt <- reshape2::melt(bio.dat, id.vars="year", variable.name="series")
-ggplot(bio.melt, aes(year,value)) +
-  geom_line()+ 
-  theme_bw()+
-  facet_wrap(~ series, scales = "free", ncol=4)
-ggstatsplot::ggcorrmat(
-  data = bio.dat,
-  type = "nonparametric",
-  colors = c("darkred", "white", "steelblue"))
-```
 
 ### Patterns and correlations in biological indices:
 
