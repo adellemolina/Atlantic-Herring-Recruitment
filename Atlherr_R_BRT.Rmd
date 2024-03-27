@@ -1,0 +1,104 @@
+---
+title: "Atl Herring Recruitment BRT"
+author: "AM"
+date: "2024-02-19"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Boosted Regression Trees for herring recruitment
+
+Code for getting data, generating time series of possible predictors, plotting recruitment and predictor time series, producing correlation matrices to reduce the possible predictor list, and running boosted regression trees.
+
+```{r packages, echo = F}
+library(dplyr)
+library(ggplot2)
+library(corrplot)
+library(reshape2)
+library(ggstatsplot)
+library(gbm)
+library(tidyr)
+library(dismo)
+library(gridExtra)
+library(ggcorrplot)
+library(ggpubr)
+```
+
+## Load data
+
+The data was modified, summarized, compiled and exported in a separate script
+
+-   OISST:
+-   Bottom Temperature: high resolution daily composite product from four ocean models (as in du Pontavice et al. 2023)
+-   Environmental indices
+    1.  Heatwave index
+    2.  Cold Pool index
+    3.  Gulf Stream Index
+    4.  Warm Slope Water proportion
+-   Food
+    -   Abundance of calanus finmarchicus stage C5 in the GoM in fall
+    -   Zooplankton abundance
+        -   Cnidaria
+        -   small calanoid
+        -   large calanoid
+-   Predators
+    -   Haddock index: retrospective adjusted SSB from the GoM Haddock 2019 assessment (what about GB)
+    -   Mackerel SSB is from the 2021 assessment
+-   Biological indices
+    -   Chlorophyll a
+    -   Primary production
+-   Herring recruitment indices from 2022 assessment
+
+```{r data}
+# Load in the combined data (mostly for plotting)
+getwd()
+dat <- read.csv(here::here('Data/Combined.Data.csv'))
+
+# Load in the variable data and add lags
+```
+
+## Time Series
+
+```{r recruitment time series}
+dat%>% 
+  dplyr::select(year,recruits,R.no.devs,logR.dev, SR.std.resid, SSB, SPR,Rs)%>%
+  reshape2::melt(id.vars="year", variable.name="series")%>%
+  ggplot(aes(year,value)) +
+  geom_line()+ 
+  theme_bw()+
+  facet_wrap(~ series, scales = "free")
+```
+
+```{r environmental ts plots, echo = FALSE}
+
+dat%>% 
+  dplyr::select(year, WSW, CP, HW, BT, OISST) %>%
+  reshape2::melt(id.vars="year", variable.name="series")%>%
+  ggplot(aes(year,value)) +
+  geom_line()+ 
+  theme_bw()+
+  facet_wrap(~ series, scales = "free", ncol=4)
+```
+
+```{r biological ts plots, echo = FALSE}
+dat%>% 
+  dplyr::select(year, HadSSB_GOM, HadSSB_GB, MackSSB, Jelly.Abun, Sm.cal.abun, Lg.cal.abun, Cfin.C5)%>%
+  reshape2::melt(id.vars="year", variable.name="series")%>%
+  ggplot(aes(year,value)) +
+  geom_line(size=1)+ 
+  theme_bw()+
+  facet_wrap(~ series, scales = "free", ncol=4)
+```
+
+```{r}
+
+```
+
+```{r add lags }
+
+
+
+```
