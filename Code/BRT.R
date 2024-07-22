@@ -1,8 +1,8 @@
 ##      Title:            Herring Recruitment Boosted Regression Trees
 ##      Author:           Adelle Molina
 ##      Created:          4/28/23
-##      Updated:          5/2/23
-##      Notes:             
+##      Updated:          7/18/24
+##      Notes:            This includes step by step, sequential model runs  
 
 # Packages ----------------------------------------------------------------
 library(dplyr)
@@ -68,7 +68,6 @@ ggplot(data=ri,aes(x=reorder(var,rel.inf),y=rel.inf))+
   coord_flip()+
   theme_bw()
 dev.off()
-
 
 # Partial Dependence Plots ---------------------------------------------------------------
 # For the model with highest deviance explained --> BRT.ldev_2

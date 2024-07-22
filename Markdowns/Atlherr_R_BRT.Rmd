@@ -5,13 +5,13 @@ date: "2024-02-19"
 output: html_document
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+```{r setup, include=T}
+knitr::opts_chunk$set(echo = F)
 ```
 
 # Boosted Regression Trees for herring recruitment
 
-Code for getting data, generating time series of possible predictors, plotting recruitment and predictor time series, producing correlation matrices to reduce the possible predictor list, and running boosted regression trees
+Code for getting data, generating time series of possible indicators, plotting recruitment and indicator time series, producing correlation matrices to reduce the list, and running boosted regression trees
 
 ```{r packages, echo = F}
 library(dplyr)
@@ -27,7 +27,7 @@ library(ggcorrplot)
 library(ggpubr)
 ```
 
-## Load data
+## Data
 
 The data was modified, summarized, compiled and exported in a separate script
 
@@ -46,25 +46,24 @@ The data was modified, summarized, compiled and exported in a separate script
         -   large calanoid
 -   Predators
     -   Haddock index: retrospective adjusted SSB from the GoM Haddock 2019 assessment (what about GB)
-    -   Mackerel SSB is from the 2021 assessment
 -   Biological indices
     -   Chlorophyll a
     -   Primary production
 -   Herring recruitment outputs from 2022 assessment
 
 ```{r data}
-# Load in the combined data (mostly for plotting)
-getwd()
-dat <- read.csv(here::here('Data/Combined.Data.csv'))
+# Load in the combined data 
+dat <- read.csv(here::here('Data/Combined.Data.csv')) # old version
 
 # Load in the variable data and add lags
+
 ```
 
-## Time Series
+## Preliminary plots
 
-```{r recruitment time series}
+```{r ASAP.TS, echo=F, include=T}
 dat%>% 
-  dplyr::select(year,recruits,R.no.devs,logR.dev, SR.std.resid, SSB, SPR,Rs)%>%
+  dplyr::select(year,recruits,R.no.devs,logR.dev, SR.std.resid, SSB, SPR, Rs)%>%
   reshape2::melt(id.vars="year", variable.name="series")%>%
   ggplot(aes(year,value)) +
   geom_line()+ 
@@ -72,7 +71,32 @@ dat%>%
   facet_wrap(~ series, scales = "free")
 ```
 
-```{r environmental ts plots, echo = FALSE}
+-   Lots of fish in the "beginning" and two strong recruitment years in 67 & 71, but they did not result in large SSB, which in fact declined sharply throughout 70s, during which few strong year classes were produced. 
+
+-   SSB was low in the early 80s but started slowly recovering in the late 80s. A strong year class in 1990 perhaps contributed to the ramping up in the 90s, leading to a high value in 1993.
+
+-   Then, in 1997, SSB reached a high value that had not been observed since late 60s, and this was exactly two years after a very strong recruit year in 1995.
+
+-   There was another strong year class in 1999 (which perhaps lead to a SSB peak in 2001), followed by a series of smaller and smaller "strong" year classes every 3-4 years in the 2000s. During this time, SSB declined through 2010.
+
+-   Finally, another very strong recruitment pulse occurred in 2009 and 2012, with subsequent peaks in SSB 2-3 years later in 2012 and 2014. 
+
+-   Since then recruitment has been very low and has not experienced the typical pulse cycles and SSB has been steadily declining.
+
+```{r CCF, echo=FALSE, include=T}
+
+ccf(dat$SSB_1, dat$recruits, plot = T, na.action = na.pass)
+```
+
+It appears that recruitment leads SSB by 3/4 years
+
+## Proposed Indicators (correlation)
+
+```{r}
+
+```
+
+```{r environmental ts plots, echo = FALSE, include=T}
 
 dat%>% 
   dplyr::select(year, WSW, CP, HW, BT, OISST) %>%

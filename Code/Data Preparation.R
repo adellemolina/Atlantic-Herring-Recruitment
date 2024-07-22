@@ -2,8 +2,10 @@
 ##      Script Purpose:   Prepare multivariate time series for analysis
 ##      Author:           Adelle Molina
 ##      Created:          7/22/22
-##      Updated:          3/28/24
-##      Notes:            
+##      Updated:          7/19/24
+##      Notes:            Add area heatwave index & area oisst anoms? Change oisst source data
+##      To Do:            See notes for what lags to add and change in "smart" lag section
+##                            & combine new data/variables
 # Libraries ---------------------------------------------------------------
 #remotes::install_github("noaa-edab/ecodata",build_vignettes=TRUE)
 library(ecodata)
@@ -29,7 +31,7 @@ EPUwt <- ecodata::epu_sf%>%
   dplyr::mutate(Weight=Shape_Area/sum(Shape_Area))%>%
   dplyr::select(EPU, Weight)
 
-# A. OISST -------------------------------------------------------------------
+#     A. OISST -------------------------------------------------------------------
 # Manually downloaded daily mean SST (1982-present) from https://psl.noaa.gov/data/gridded/data.noaa.oisst.v2.highres.html
 # In "get sst data" script" computed daily mean by EPU, combined, and exported, load that in
 OISST  <- read.csv(here::here('Data/OISST.csv'), header = T, blank.lines.skip = T)
@@ -37,26 +39,29 @@ OISST  <- read.csv(here::here('Data/OISST.csv'), header = T, blank.lines.skip = 
 # Calculate basin wide annual mean (no area weighting)
 OISST.Annual  <- OISST %>%
   dplyr::group_by(year) %>%
-  dplyr::summarise(OISST = mean(Value))
+  dplyr::mutate(OISST = mean(Value))%>%
+  dplyr::select(year,OISST)%>%
+  unique()
 
-# Calculate annual means by region
-OISST.Regional <- OISST %>%
+# Calculate annual means by region 
+OISST.Reg <- OISST %>%
   dplyr::select(year, EPU, day, Value) %>%
   dplyr::group_by(year, EPU) %>%
   dplyr::summarise(Annual.Mean = mean(Value))
 
-# Combine these into one with columns for each region
-OISST.Reg <- pivot_wider(OISST.Regional, names_from = EPU, values_from = Annual.Mean) 
-OISST.Reg <- OISST.Reg %>%
+#combine with basin wide mean into one object
+OISST.All <- OISST.Reg %>%
+  pivot_wider(names_from = EPU, values_from = Annual.Mean) %>%
   dplyr::rename(OISST.GB=GB,
                 OISST.GOM=GOM,
                 OISST.MAB=MAB,
-                OISST.SS=SS)
-# B. BT  -------------------------------------------------------
+                OISST.SS=SS)%>%
+  merge(OISST.Annual, by = "year", all.x = TRUE, all.y = T)
+
+#     B. BT  -------------------------------------------------------
 #str(bottom_temp) #in situ anomalies from survey 
 #str(bottom_temp_comp) # high resolution BT model 
 #levels(as.factor(bottom_temp_comp$Var))
-
 # Select the hi res annual bottom temp 
 BT <- bottom_temp_comp %>%
   dplyr::filter(Var==c("Annual_Bottom Temp"))
@@ -65,93 +70,104 @@ BT <- bottom_temp_comp %>%
 BT <- BT%>%
   left_join(EPUwt, by="EPU")
 
-# Pivot to have a column for each region
-BT.Reg <- BT  %>%
-  dplyr::select(Time, EPU, Value)%>%
-  dplyr::group_by(Time) %>%
-  pivot_wider(names_from = EPU, values_from = Value)  %>%
+BT.An <- BT%>%
+  dplyr::group_by(Time)%>%
+  dplyr::mutate(BT = weighted.mean(Value, Weight, na.rm = TRUE))%>%
+  dplyr::rename(year=Time) %>%
+  dplyr::select(year,BT) %>%
+  unique()
+
+BT.Reg <- BT%>%
+  dplyr::select(Time, EPU, Value) %>%
+  dplyr::rename(year=Time) %>%
+  dplyr::group_by(year, EPU)%>%
+  dplyr::summarise(Annual.Mean = mean(Value))
+  
+# Calculate area weighted, annual basin mean and add to an object with columns for each EPU
+BT.All <- BT.Reg %>%
+  tidyr::pivot_wider(names_from = EPU, values_from = Annual.Mean)  %>%
   dplyr::rename(BT.GB=GB,
                 BT.GOM=GOM,
                 BT.MAB=MAB,
-                BT.SS=SS,
-                year = Time)
+                BT.SS=SS)%>%
+  merge(BT.An, by = "year", all.x = TRUE, all.y = T)
 
-# Calculate area weighted, annual basin mean
-BT.An <- BT%>%
-  dplyr::select(Time, EPU, Value, Weight)%>%
-  dplyr::group_by(Time)%>%
-  dplyr::summarise(BT = weighted.mean(Value, Weight, na.rm = TRUE))%>%
-  dplyr::rename(year=Time)
-
-# Plot Temperature  -------------------------------------------------------
+#     C. Plot   -------------------------------------------------------
 # Oisst (regional & annual --> patterns similar across region)
-ts.OISST.Reg <- ggplot(OISST.Regional, aes(x = year, y = Annual.Mean, col = EPU))  + 
+ts.OISST.Reg <- ggplot(OISST.Reg, aes(x = year, y = Annual.Mean, col = EPU))  + 
   theme_bw() +  
-  geom_line(na.rm = T, size = 1.5)+
+  geom_point(na.rm=T, size=1.5)+
+  geom_line(na.rm = T, linewidth = 1)+
+  scale_x_continuous(breaks = seq(0,2022,5),minor_breaks = seq(0,2022,1))+
   xlab("Year") +
   ylab("OISST")
 
-ts.OISST.An <- ggplot(OISST.Annual, aes(x = year, y = OISST))  + 
+ts.OISST.An <- ggplot(OISST.All, aes(x = year, y = OISST))  + 
   theme_bw() +  
-  geom_line(na.rm = T, size = 1.5)+
+  geom_point(na.rm=T, size=1.5)+
+  geom_line(na.rm = T, linewidth = 1)+
+  scale_x_continuous(breaks = seq(0,2022,5),minor_breaks = seq(0,2022,1))+
   xlab("Year") +
   ylab("OISST")
 
-ts.bt.An <- ggplot(BT.An, aes(x = year, y = BT))  + 
-  theme_bw() +   
-  geom_line(na.rm = T, size = 1.5) +
+ts.BT.Reg <- ggplot(BT.Reg, aes(x = year, y = Annual.Mean, col = EPU))  +
+  theme_bw()+
+  geom_point(na.rm=T, size=1.5)+
+  geom_line(na.rm = T, linewidth = 1)+
+  scale_x_continuous(breaks = seq(0,2022,5),minor_breaks = seq(0,2022,1))+
   xlab("Year") +
   ylab("BT")
 
-ts.BT.Reg <- ggplot(BT, aes(x=Time, y=Value, col=EPU, group=EPU))+
-  geom_line(na.rm = T, size = 1.5)+
+ts.BT.An <- ggplot(BT.An, aes(x=year, y=BT))+
+  geom_point(na.rm=T, size=1.5)+
+  geom_line(na.rm = T, linewidth = 1)+
   theme_bw() +
+  scale_x_continuous(breaks = seq(0,2022,5),minor_breaks = seq(0,2022,1))+
   xlab("Year") +
   ylab("BT") 
 
 # Now combine and save
-tiff("ts.Temp.tiff", width = 6, height = 6, units = 'in', res = 300)
-ggarrange(ts.OISST.Reg, ts.OISST.An, ts.BT.Reg, ts.bt.An, ncol=2, nrow = 2, widths=c(1, .7))
+tiff("Figures/ts.Temp.tiff", width = 6, height = 6, units = 'in', res = 300)
+ggarrange(ts.OISST.Reg, ts.OISST.An, ts.BT.Reg, ts.BT.An, ncol=2, nrow = 2, widths=c(1, .7))
 dev.off()
 
-# Environmental Indices -----------------------------------------------------------------
-
+# 2. Environmental Indices -----------------------------------------------------------------
 # Slope water proportions
-str(slopewater)
-levels(as.factor(slopewater$Var))
-WSW <- slopewater %>%
+#levels(as.factor(slopewater$Var))
+WSW <- ecodata::slopewater %>%
   dplyr::filter(Var%in%c("WSW proportion ne channel"))%>% # select the warm slope water variable
   dplyr::select(Time, Value)%>%
   dplyr::rename(year=Time,
                 WSW = Value)
 
 # cold pool index (from ecodata) only MAB, various indices from 1958-2021 (recently changed calculation methods)
-str(cold_pool)
-levels(as.factor(cold_pool$Var))
-CP <- cold_pool %>%
+#str(cold_pool)
+#levels(as.factor(cold_pool$Var))
+CP <- ecodata::cold_pool %>%
   dplyr::filter(Var%in%c("cold_pool_index"))%>% # select the cold pool index variable
   dplyr::select(Time, Value)%>%
   dplyr::rename(year=Time,
                 CP = Value)
 
 # gulf stream index (from ecodata) from 1954-2020 for all regions (updated)
-GSI <- gsi
+GSI <- ecodata::gsi
 GSI$Year.Mo <- as.character(GSI$Time)
 
 #split up time column into year and month
 GSI <- GSI %>%
   as.data.frame()%>%
-  separate(Year.Mo, c("Year","Month"), sep = 4, remove = T, fill = "left", convert = T, extra = "merge") 
+  tidyr::separate(Year.Mo, c("Year","Month"), sep = 4, remove = T, fill = "left", convert = T, extra = "merge") 
 
-# compute annual average
+# compute annual average from monthly means --> might want to do this for just certain months?
 GSI.Annual <- GSI %>%
   dplyr::group_by(Year) %>%
   summarise(GSI = mean(Value))%>%
   rename(year=Year)
 
 # marine heatwave intensity (from ecodata) by epu, multiple variables 
-str(heatwave)
-levels(as.factor(heatwave$Var)) # 6 indices, cumulative intensity and max intensity
+### NOTE THAT THERES A NEW ONE CALLED ESP that may be better
+str(ecodata::heatwave)
+levels(as.factor(ecodata::heatwave$Var)) # 6 indices, cumulative intensity and max intensity
 
 # add area weights and calculate basin wide annual average
 # select cumulative intensity index
@@ -174,305 +190,365 @@ HW.Reg <- HW %>%
                 HW.GOM=GOM,
                 HW.MAB=MAB,
                 year = Time)
-# lots of N/A in this set b/c not available for all regions in all years
 
 # Winter NAO from Hurrell website (use this one)
 #https://climatedataguide.ucar.edu/climate-data/hurrell-north-atlantic-oscillation-nao-index-station-based
 winterNAO_PC <- read.delim(here::here('Data/WinterNAO.txt'), header = T, sep = "\t", dec = ".")
 winterNAO_PC <- winterNAO_PC %>%
-  separate(Hurrell.PC.Based.North.Atlantic.Oscillation.Index..DJFM.,
+  tidyr::separate(Hurrell.PC.Based.North.Atlantic.Oscillation.Index..DJFM.,
            c("year","NAOIndex"), remove = T,  sep="   ", convert = T)
 
-# Plot environmental indices -------------------------------------------------------------------
+#     A. Plot -------------------------------------------------------------------
 # Cold Pool (annual), Gulf Stream (annual), Heatwave Index (annual and regional), Western Slope Water (annual), WinterNao
 c <- ggplot(CP, aes(x = year, y = CP))  + 
   theme_bw() +  
   xlab("Year") +
-  geom_line(na.rm=T) +
+  geom_line(na.rm=T, linewidth=1) +
+  geom_point(na.rm=T, size=1.5)+
+  scale_x_continuous(breaks = seq(0,2022,5),minor_breaks = seq(0,2022,1))+
   ylab("Cold Pool Index")
 
 g <- ggplot(GSI.Annual, aes(x = year, y = GSI))  + 
   theme_bw() +  
   xlab("Year") +
-  geom_line(na.rm=T) +
+  geom_line(na.rm=T, linewidth=1) +
+  geom_point(na.rm=T, size=1.5)+
+  scale_x_continuous(breaks = seq(0,2022,5),minor_breaks = seq(0,2022,1))+
   ylab("Gulf Stream Index")
 
 h <- ggplot(HW, aes(x = Time, y = Value))  + 
   theme_bw() +  
   xlab("Year") +
   facet_wrap(~EPU)+
-  geom_line(na.rm=T) +
+  geom_line(na.rm=T, linewidth=1) +
+  geom_point(na.rm=T, size=1.5)+
+  scale_x_continuous(breaks = seq(0,2022,5),minor_breaks = seq(0,2022,1))+
   ylab("Heatwave Index")
 
 h2 <- ggplot(HW.An, aes(x = year, y = HW))  + 
   theme_bw() +  
   xlab("Year") +
-  geom_line(na.rm=T) +
+  geom_line(na.rm=T, linewidth=1) +
+  geom_point(na.rm=T, size=1.5)+
+  scale_x_continuous(breaks = seq(0,2022,5),minor_breaks = seq(0,2022,1))+
   ylab("Heatwave Index")
 
 w <- ggplot(WSW, aes(x=year, y=WSW))+
   theme_bw() +  
   xlab("Year") +
-  geom_line(na.rm=T) +
+  geom_line(na.rm=T, linewidth=1) +
+  geom_point(na.rm=T, size=1.5)+
+  scale_x_continuous(breaks = seq(0,2022,5),minor_breaks = seq(0,2022,1))+
   ylab("Warm Slope Water %")
 
 nao <- ggplot(winterNAO_PC, aes(x = year, y = NAOIndex))  + 
   theme_bw() +  
   xlab("Year") +
-  geom_line(na.rm=T) +
-  xlim(1965,2023)+
+  geom_line(na.rm=T, linewidth=1) +
+  geom_point(na.rm=T, size=1.5)+
+  scale_x_continuous(breaks = seq(0,2025,5),minor_breaks = seq(0,2025,1), limits = c(1965,2023))+
   ylab("Winter NAO Index")
 
 # Save these as one combined plot
-tiff("Environmental Indices.tiff", width = 8, height = 5, units = 'in', res = 300)
+tiff("Figures/Environmental Indices.tiff", width = 8, height = 5, units = 'in', res = 300)
 ggarrange(c, g, h2, h, w, nao, ncol=2, nrow=3, widths=c(.7,1))
 dev.off()
 
-# Load and modify Biological Data ---------------------------------------------------------
+# 3. Upper Trophic ---------------------------------------------------------
 
-# Predator data (downloaded from stock assessment portal and manually combined)
+# A. Predators 
+# (downloaded from stock assessment portal and manually combined)
 # Haddock SSB (Retrospective Adjusted from 2022 Assessment (for both GoM and GB)
 # Should I add mackerel back in (don't think so) but def try with Micah's index instead of both Had separate
 predators <- read.csv(here::here('Data/Pred_Assessment.csv'))
+predators <- predators%>% 
+  dplyr::select(year, HadSSB_GB, HadSSB_GoM)
 
-# Primary Production (chlorophyll a annual area weighted, primary production regional and area weighted basin wide)
-Primary <- chl_pp
-levels(as.factor(Primary$Var))
-
-# Split up the time variable and add area weights
-Primary$Year <- as.character(Primary$Time)
-PP <- Primary%>%
-  separate(Year, c("Extra","year"), sep = 2, remove = T, fill = "left", convert = T, extra = "merge")
-PP <- PP %>% left_join(EPUwt, by="EPU")
-PP$year <- as.integer(PP$year, na.rm=T)
-
-# Chlorophyll a  from 1998-2020 regional
-Chla <- PP%>%
-  dplyr::filter(Var==c("ANNUAL_CHLOR_A_MEDIAN"))%>% 
-  dplyr::select(year, EPU, Value, Var, Weight)%>%
-  as.data.frame()
-
-# Calculate annual basin mean
-Chla.An <- Chla%>%
-  dplyr::group_by(year) %>%
-  dplyr::summarise(ChlA=weighted.mean(Value, Weight, na.rm = TRUE))
-
-# Primary Production Rate regional
-PPD.Reg <- PP%>%
-  dplyr::filter(Var==c("ANNUAL_PPD_MEDIAN"))%>% 
-  dplyr::select(year, EPU, Value, Var, Weight)%>%
-  as.data.frame()
-
-# Pivot and rename for merging 
-PPD.reg <- PPD.Reg %>% 
-  dplyr::select(year, EPU, Value)%>%
-  pivot_wider(names_from = EPU, values_from = Value) %>%
-  dplyr::rename(PP.GB=GB,
-                PP.GOM=GOM,
-                PP.MAB=MAB)
-
-# annual basin mean
-PPD.An <- PPD.Reg%>%
-  dplyr::group_by(year) %>%
-  dplyr::summarise(PPD=weighted.mean(Value, Weight, na.rm = TRUE))
-
-# Plot production variables and predation -----------------------------------------------
-ts.ChlAn  <- ggplot(Chla.An, aes(x = year, y = ChlA))  + 
+#Plot
+ts.had.GoM  <- ggplot(predators, aes(x = year, y = HadSSB_GoM))  + 
   theme_bw() +  
-  geom_line(na.rm = T, size = 1) +
-  xlab("Year") +
-  ylab("Chlorophyll a (mg/m3)")
-
-ts.PPDAn  <- ggplot(PPD.An, aes(x = year , y = PPD))  + 
-  theme_bw() +  
-  geom_line(na.rm = T, size = 1) +
-  xlab("Year") +
-  ylab("Primary Production (gC/m2/day)")
-
-ts.PPDReg  <- ggplot(PPD.Reg, aes(x = year, y = Value, group = EPU, col = EPU))  + 
-  theme_bw() +  
-  geom_line(na.rm = T, size = 1) +
-  xlab("Year") +
-  ylab("Primary Production (gC/m2/day)")
-
-# Combine and save
-tiff("ts.PrimaryProd.tiff", width = 8, height = 5, units = 'in', res = 300)
-ggarrange(ts.ChlAn, ts.PPDAn, ts.PPDReg, widths=c(1, .7))
-dev.off()
-
-# Predators
-ts.hadSSB  <- ggplot(predators, aes(x = year, y = HadSSB_GoM))  + 
-  theme_bw() +  
-  geom_line(size = 1, na.rm = T) +
+  geom_line(na.rm=T, linewidth=1) +
+  geom_point(na.rm=T, size=1.5)+
+  scale_x_continuous(breaks = seq(0,2022,5),minor_breaks = seq(0,2022,1))+
   xlab("Year") +
   ylab("GoM Haddock SSB (metric tons)")
 
-ts.mackSSB  <- ggplot(predators, aes(x = year, y = MackSSB))  + 
+ts.had.GB  <- ggplot(predators, aes(x = year, y = HadSSB_GB))  + 
   theme_bw() +  
-  geom_line(size = 1, na.rm = T) +
+  geom_line(na.rm=T, linewidth=1) +
+  geom_point(na.rm=T, size=1.5)+
+  scale_x_continuous(breaks = seq(0,2022,5),minor_breaks = seq(0,2022,1))+
   xlab("Year") +
-  ylab("Atlantic Mackerel SSB (metric tons)")
+  ylab("GB Haddock SSB (metric tons)")
 
-tiff("ts.Predators.tiff", width = 5, height = 5, units = 'in', res = 300)
-ggarrange(ts.mackSSB, ts.hadSSB)
+#ts.mackSSB  <- ggplot(predators, aes(x = year, y = MackSSB))  + 
+  #theme_bw() +  
+  #geom_line(linewidth = 1, na.rm = T) +
+  #xlab("Year") +
+  #ylab("Atlantic Mackerel SSB (metric tons)")
+
+tiff("Figures/ts.Predators.tiff", width = 5, height = 5, units = 'in', res = 300)
+ggarrange(ts.had.GoM, ts.had.GB)
 dev.off()
 
-# PLANKTON  ------------------------------------------------------------
+#B. Competitors
 
-# 1. Calanus stages -------------------------------------------------------
+# Make object from zooplankton anomalies indicator and add area weights
+zoodat <- ecodata::zoo_abundance_anom %>% 
+  full_join(EPUwt, by="EPU")%>%
+  dplyr::rename(year=Time) %>%
+  mutate(Value=as.numeric(Value))
+
+# Cnidaria by EPU
+jelly.Reg <- zoodat%>% 
+  dplyr::filter(Var==c("Cnidaria"))%>%
+  dplyr::select(year, EPU, Value)%>%
+  dplyr::group_by(year) %>%
+  tidyr::pivot_wider(names_from = EPU, values_from = Value)  %>%
+  dplyr::rename(jelly.GB=GB,
+                jelly.GOM=GOM,
+                jelly.MAB=MAB)
+
+# Cnidaria basin wide
+jelly.An <- zoodat%>% 
+  dplyr::filter(Var==c("Cnidaria"))%>%
+  dplyr::group_by(year) %>%
+  dplyr::summarize(Jelly.Abun = weighted.mean(Value, Weight, na.rm = TRUE))%>%
+  dplyr::select(year, Jelly.Abun)
+
+# Plot
+ts.jelly.An <- ggplot(jelly.An, aes(x = year, y = Jelly.Abun))  + 
+  theme_bw() +  
+  geom_line(na.rm=T, linewidth=1) +
+  geom_point(na.rm=T, size=1.5)+
+  scale_x_continuous(breaks = seq(0,2022,5),minor_breaks = seq(0,2022,1))+
+  xlab("Year") +
+  ylab("Cnidaria Abundance Anoms")
+
+ts.jelly.Reg <- zoodat%>% 
+  dplyr::filter(Var==c("Cnidaria"))%>%
+  dplyr::select(year, EPU, Value)%>%
+  ggplot(aes(x = year, y = Value, group=EPU, col=EPU))  + 
+  theme_bw() + 
+  geom_line(na.rm=T, linewidth=1) +
+  geom_point(na.rm=T, size=1.5)+
+  scale_x_continuous(breaks = seq(0,2022,5),minor_breaks = seq(0,2022,1))+
+  xlab("Year") +
+  ylab("Cnidaria Abundance Anoms")
+
+tiff("Figures/ts.Competitors.tiff", width = 8, height = 5, units = 'in', res = 300)
+ggarrange(ts.jelly.An, ts.jelly.Reg)
+dev.off()
+
+# 4. Lower Trophic --------------------------------------------------------
+
+#     A. Chlorophyll
+# New indicator includes production by species 
+# this must be cropped to seasonal shapefiles and includes each season
+# for recruitment....chl from fall area in fall and winter is prob the most important
+str(ecodata::ESP_seasonal_chl)
+levels(ecodata::ESP_seasonal_chl$ESP)
+#atlantic_herring_spring"
+#atlantic_herring_fall" 
+
+# Pull out chlorophyll data for the fall shapefile
+Chl.fall <- ecodata::ESP_seasonal_chl %>%
+  dplyr::filter(ESP==c("atlantic_herring_fall"))
+
+# Split out into the seasons
+Chl.fall.season <- Chl.fall %>% 
+  dplyr::select(Time, Var, Value)%>%
+  tidyr::pivot_wider(names_from = Var, values_from = Value) %>%
+  dplyr::rename(Chl.fall.w = winter,
+                Chl.fall.sp = spring,
+                Chl.fall.su = summer,
+                Chl.fall.f = fall) %>%
+  dplyr::rename(year=Time)
+
+ts.Chl.falldist  <- ggplot(Chl.fall, aes(x = Time, y = Value, group = Var, col = Var))  + 
+  theme_bw() +  
+  geom_line(na.rm = T, linewidth = 1) +
+  xlab("Year") +
+  ylab("Primary Production (gC/m2/day)")
+
+#     B. Zooplankton 
+#         i. Calanus stages -------------------------------------------------------
 # Load calanus stage data, save as object, modify and summarize
-# Check with Sarah as to which data she thinks I should use
-load(file='Data/RM_20210120_CalanusStage.Rda')
+head(ecodata::calanus_stage)
+levels(as.factor(ecodata::calanus_stage$Var))
 
-calanus <- CalanusStage%>%
-  dplyr::rename(EPU=epu)%>%
-  left_join(EPUwt, by="EPU")
-
-# split up by season
-Cal.Fall <- calanus%>%
-  dplyr::filter(Units==c("No. per 100m^-3"))%>%
-  dplyr::filter(season==c("Fall"))
-Cal.Summer <- calanus%>%
-  dplyr::filter(Units==c("No. per 100m^-3"))%>%
-  dplyr::filter(season==c("Summer"))
-Cal.Spring <- calanus%>%
-  dplyr::filter(Units==c("No. per 100m^-3"))%>%
-  dplyr::filter(season==c("Spring"))
+# split up by season and stage
+c5fall <- ecodata::calanus_stage %>%
+  dplyr::filter(Var==c("c5-Fall"))
 
 # Pull out GoM timeseries of fall stage c5 
-cfin.GoM.C5 <- Cal.Fall%>%
-  dplyr::filter(Var==c("c5"))%>%
+c5fall_GoM <- c5fall%>%
   dplyr::filter(EPU==c("GOM"))%>%
-  mutate(Value=log(Value))
-  
-#           Plot Calanus finmarchicus time series -----------------------------------
-#  seasonal trends for all stages with colors for EPU
-ts.Cal.Fall <- ggplot(Cal.Fall, aes(x=Year, y = Value, group=EPU, color=EPU))+
+  mutate(Value=log(Value)) %>%
+  dplyr::rename(year=Time,
+                c5fall.gom=Value)%>%
+  dplyr::select(year, c5fall.gom)
+
+#### Plots
+ # plot of all data in stage stuff
+ts.Cal.Stages <- ggplot(ecodata::calanus_stage, aes(x=Time, y = Value, group=EPU, color=EPU))+
   geom_line(size=1, na.rm=T)+
   facet_grid(.~Var)+
+  theme_bw()
+
+#  Stage C5 calanus in fall with colors for EPU
+ts.Cal.Fall <- ggplot(c5fall, aes(x=Time, y = Value, group=EPU, color=EPU))+
+  geom_line(na.rm=T)+
+  geom_point(na.rm=T)+
+  #facet_grid(.~Var)+
   ggtitle("Fall")+
   theme_bw()
 
-ts.Cal.Spring <- ggplot(Cal.Spring, aes(x=Year, y = Value, group=EPU, color=EPU))+
-  geom_line(size=1, na.rm=T)+
-  theme_bw()+
-  facet_grid(.~Var)+
-  ggtitle("Spring")
-
-ts.Cal.Summer <- ggplot(Cal.Summer, aes(x=Year, y = Value, group=EPU, color=EPU))+
-  geom_line(size=1, na.rm=T)+
-  theme_bw()+
-  facet_grid(.~Var)+
-  ggtitle("Summer")
-
-ts.C5.FalGom <- ggplot(cfin.GoM.C5, aes(x=Year, y = Value))+
-  geom_line(size=1, na.rm=T)+
+# Plot just ts of calanus c5 in GoM fall
+ts.C5.FalGom <- ggplot(c5fall_GoM, aes(x=year, y = c5fall.gom))+
+  geom_line(na.rm=T)+
+  geom_point(na.rm=T)+
   theme_bw()+
   xlab("Year") +
   ylab("Calanus finmarchicus C5 GoM Fall")
 
 # plot together and save
-tiff("TS.Seas.Reg.CalStages.tiff", width = 8, height = 8, units = 'in', res = 300)
-ggarrange(ts.Cal.Summer, ts.Cal.Spring, ts.Cal.Fall, ts.C5.FalGom)
+#tiff("TS.Seas.Reg.CalStages.tiff", width = 8, height = 8, units = 'in', res = 300)
+tiff("Figures/ts.prod&calanus.tiff", width = 8, height = 8, units = 'in', res = 300)
+ggarrange(ts.Chl.falldist, ts.Cal.Stages, ts.Cal.Fall, ts.C5.FalGom)
 # Summer: lots of variation in all stages, but most noticeable in c5 summer, lots of interannual var that is diff in different regions
 # Spring: most variation is in GoM, random spring blooms (mostly in copepodites)
 # Fall: very low var in other stages, c5 shows lots of var in GoM and steady decline since 2000 --> use just that
 dev.off()
 
-# 2.All Zooplankton Stratified Abundance -------------------------------------------------------------
-str(zoo_strat_abun) # region and taxa (euphausids, cnidaria, large and small calanoida)
-levels(as.factor(zoo_strat_abun$Var))
-levels(as.factor(zoo_abundance_anom$Var))
+#         ii. All Zooplankton  -------------------------------------------------------------
+str(ecodata::zoo_strat_abun) # region and taxa (euphausids & cnidaria)
+levels(as.factor(ecodata::zoo_strat_abun$EPU)) # this is only mab now 
+str(ecodata::zoo_abundance_anom) # abundance anomalies for various zoo taxa
+levels(as.factor(ecodata::zoo_abundance_anom$Var)) #calfin, smCopepods, LgCopepods, cnidaria (used above already)
 
-str(ecodata::zoo_regime)
-# Add weights
-zoodat <- zoo_strat_abun %>% full_join(EPUwt, by="EPU")
+# Pull out taxa of interest (from object made previously for cnidaria) & Pivot to a column for each region
+calfin.Reg <- zoodat%>% 
+  dplyr::filter(Var==c("Calfin"))%>%
+  dplyr::select(year, EPU, Value)%>%
+  dplyr::group_by(year) %>%
+  tidyr::pivot_wider(names_from = EPU, values_from = Value)  %>%
+  dplyr::rename(cfin.GB=GB,
+                cfin.GOM=GOM,
+                cfin.MAB=MAB)
 
-# Calculate area weighted basin wide annual mean for each taxa
-smallcal <- zoodat%>% 
-  dplyr::filter(Var==c("SmallCalanoida"))%>%
-  dplyr::group_by(Time) %>%
-  dplyr::summarise(Sm.cal.abun = log(weighted.mean(Value, Weight, na.rm = TRUE)))%>%
-  dplyr::rename(year=Time) %>%
-  dplyr::select(year, Sm.cal.abun)
+# Calculate area weighted basin wide annual mean
+calfin.An <- zoodat%>% 
+  dplyr::filter(Var==c("Calfin"))%>%
+  dplyr::group_by(year) %>%
+  dplyr::summarise(cfin = weighted.mean(Value, Weight, na.rm = TRUE))%>%
+  dplyr::select(year, cfin)
 
-largecal <- zoodat%>% 
-  dplyr::filter(Var==c("LargeCalanoida"))%>%
-  dplyr::group_by(Time) %>%
-  dplyr::summarise(Lg.cal.abun = log(weighted.mean(Value, Weight, na.rm = TRUE)))%>%
-  dplyr::rename(year=Time) %>%
-  dplyr::select(year, Lg.cal.abun)
+# Repeat for small and large copepod variables
+smcope.Reg <- zoodat%>% 
+  dplyr::filter(Var==c("SmCopepods"))%>%
+  dplyr::select(year, EPU, Value)%>%
+  dplyr::group_by(year) %>%
+  tidyr::pivot_wider(names_from = EPU, values_from = Value)  %>%
+  dplyr::rename(smcope.GB=GB,
+                smcope.GOM=GOM,
+                smcope.MAB=MAB)
 
-jelly <- zoodat%>% 
-  dplyr::filter(Var==c("Cnidaria"))%>%
-  dplyr::group_by(Time) %>%
-  dplyr::summarise(Jelly.Abun = log(weighted.mean(Value, Weight, na.rm = TRUE)))%>%
-  dplyr::rename(year=Time) %>%
-  dplyr::select(year, Jelly.Abun)
+smcope.An <- zoodat%>% 
+  dplyr::filter(Var==c("SmCopepods"))%>%
+  dplyr::group_by(year) %>%
+  dplyr::summarise(Sm.cope = weighted.mean(Value, Weight, na.rm = TRUE))%>%
+  dplyr::select(year, Sm.cope)
 
-# regional total for all taxa
-ZooAbun.Reg <- zoodat%>%
-  group_by(Time, EPU)%>%
-  dplyr::summarise(Abund = log(sum(Value)))
+lgcope.Reg <- zoodat%>% 
+  dplyr::filter(Var==c("LgCopepods"))%>%
+  dplyr::select(year, EPU, Value)%>%
+  dplyr::group_by(year) %>%
+  tidyr::pivot_wider(names_from = EPU, values_from = Value)  %>%
+  dplyr::rename(lgcope.GB=GB,
+                lgcope.GOM=GOM,
+                lgcope.MAB=MAB)
 
-# Calculate annual basin scale, area weighted average of the total
-ZooAbun.An <- zoodat%>%
-  group_by(Time, EPU)%>%
-  dplyr::summarise(Abund = sum(Value))
+lgcope.An <- zoodat%>% 
+  dplyr::filter(Var==c("LgCopepods"))%>%
+  dplyr::group_by(year) %>%
+  dplyr::summarise(Lg.cope = weighted.mean(Value, Weight, na.rm = TRUE))%>%
+  dplyr::select(year, Lg.cope)
 
-ZooAbun.An <- ZooAbun.An%>%
-  full_join(EPUwt, by="EPU")%>%
-  group_by(Time)%>%
-  dplyr::summarise(ZooAbun = log(weighted.mean(Abund, Weight, na.rm = TRUE)))%>%
-  dplyr::rename(year=Time)%>%
-  dplyr::select(year, ZooAbun)
-
-#           Plot Zooplankton Time Series --------------------------------------------
-# Panels for taxonomic groups with colors for EPU (raw data scale)
-ts.ZooReg.Taxa <- ggplot(na.omit(zoodat), aes(Time, Value, col=EPU))+
-  geom_line(na.rm = T, size=1)+
+#             Plot Zooplankton Time Series --------------------------------------------
+# Plot all taxa w colors for EPU
+ts.ZooReg.Taxa <- ggplot(na.omit(zoodat), aes(year, Value, col=EPU))+
+  geom_line(na.rm = T)+
   theme_bw() +  
   facet_wrap(~Var)+
   xlab("Year") +
-  ylab("Zooplankton Abundance (#)")
+  ylab("Abundance Anomalies")
 
-# Total Zooplankton Abundance by Region
-ts.ZooReg <- ggplot(na.omit(ZooAbun.Reg), aes(x = Time, y = Abund, col=EPU, group=EPU))  + 
-  theme_bw() +  
-  geom_line(na.rm = T, size=1)+
-  xlab("Year") +
-  ylab("Log Zooplankton Abundance (#)")
-
-# Total Basin w3ide Zooplankton Abundance (area weighted mean)
-ts.ZooAn <- ggplot(ZooAbun.An, aes(x = year, y = ZooAbun))  + 
-  theme_bw() +  
-  geom_line(size=1, na.rm = T)+
-  xlab("Year") +
-  ylab("Log Zooplankton Abundance (#)")
-
-# Mean Annual Large Calanoida Abundance (area weighted)
-ts.LgCope <- ggplot(largecal, aes(x = year, y = Lg.cal.abun))  + 
+# Plot regionally faceted and annual average for calfin
+ts.calfin.Reg <- zoodat%>% 
+  dplyr::filter(Var==c("Calfin"))%>%
+  dplyr::select(year, EPU, Value)%>%
+  ggplot(aes(x = year, y = Value, group=EPU, col=EPU))  + 
   theme_bw() + 
-  geom_line(size=1, na.rm = T)+
+  geom_line(na.rm=T, linewidth=1) +
+  geom_point(na.rm=T, size=1.5)+
+  scale_x_continuous(breaks = seq(0,2022,5),minor_breaks = seq(0,2022,1))+
   xlab("Year") +
-  ylab("Log Abundance of Large Calanoida")
+  ylab("C. fin Abundance Anoms")
 
-# Mean Annual Small Calanoida Abundance (area weighted)
-ts.SmCope <- ggplot(smallcal, aes(x = year, y = Sm.cal.abun))  + 
-  theme_bw() +  
-  geom_line(size=1, na.rm = T)+
+ts.calfin.An <- ggplot(calfin.An, aes(x = year, y = cfin))  + 
+  theme_bw() + 
+  geom_line(na.rm=T, linewidth=1) +
+  geom_point(na.rm=T, size=1.5)+
+  scale_x_continuous(breaks = seq(0,2022,5),minor_breaks = seq(0,2022,1))+
   xlab("Year") +
-  ylab("Log Abundance of Small Calanoida")
+  ylab("C. fin Abundance Anoms")
 
-ts.jelly <- ggplot(jelly, aes(x = year, y = Jelly.Abun))  + 
-  theme_bw() +  
-  geom_line(size=1, na.rm = T)+
+# Repeat for Large Copepods 
+ts.LgCope.Reg <- zoodat%>% 
+  dplyr::filter(Var==c("LgCopepods"))%>%
+  dplyr::select(year, EPU, Value)%>%
+  ggplot(aes(x = year, y = Value, group=EPU, col=EPU))  + 
+  theme_bw() + 
+  geom_line(na.rm=T, linewidth=1) +
+  geom_point(na.rm=T, size=1.5)+
+  scale_x_continuous(breaks = seq(0,2022,5),minor_breaks = seq(0,2022,1))+
   xlab("Year") +
-  ylab("Log Abundance of Cnidarians")
+  ylab("Lg Cope Abundance Anoms")
+
+ts.LgCope.An <- ggplot(lgcope.An, aes(x = year, y = Lg.cope))  + 
+  theme_bw() + 
+  geom_line(na.rm=T, linewidth=1) +
+  geom_point(na.rm=T, size=1.5)+
+  scale_x_continuous(breaks = seq(0,2022,5),minor_breaks = seq(0,2022,1))+
+  xlab("Year") +
+  ylab("Sm Cope Abundance Anoms")
+
+# Repeat for Small
+ts.SmCope.Reg <- zoodat%>% 
+  dplyr::filter(Var==c("SmCopepods"))%>%
+  dplyr::select(year, EPU, Value)%>%
+  ggplot(aes(x = year, y = Value, group=EPU, col=EPU))  + 
+  theme_bw() +  
+  geom_line(na.rm=T, linewidth=1) +
+  geom_point(na.rm=T, size=1.5)+
+  scale_x_continuous(breaks = seq(0,2022,5),minor_breaks = seq(0,2022,1))+
+  xlab("Year") +
+  ylab("Sm Cope Abundance Anoms")
+
+ts.SmCope.An <- ggplot(smcope.An, aes(x = year, y = Sm.cope))  + 
+  theme_bw() +  
+  geom_line(na.rm=T, linewidth=1) +
+  geom_point(na.rm=T, size=1.5)+
+  scale_x_continuous(breaks = seq(0,2022,5),minor_breaks = seq(0,2022,1))+
+  xlab("Year") +
+  ylab("Sm Cope Abundance Anoms")
 
 # Combine and save
-tiff("TS.ZooAbun.tiff", width = 8, height = 8, units = 'in', res = 300)
-ggarrange(ts.ZooReg, ts.ZooAn, ts.SmCope, ts.LgCope, ts.jelly, nrow=3, ncol=2)
+#tiff("TS.ZooAbun.tiff", width = 8, height = 8, units = 'in', res = 300)
+#ggarrange(ts.ZooReg, ts.ZooAn, ts.SmCope, ts.LgCope, nrow=3, ncol=2)
+tiff("ts.Zoo.Anoms.tiff", width = 8, height = 8, units = 'in', res = 300)
+ggarrange(ts.calfin.An, ts.calfin.Reg, ts.SmCope.An, ts.SmCope.Reg,ts.LgCope.An, ts.LgCope.Reg, nrow=3, ncol=2)
 dev.off()
 
 # Load Recruitment Data (from ASAP model) ---------------------------------------------------
@@ -522,116 +598,191 @@ for(i in 2:nrow(herring)){
 # Plot herring recruitment indices  -------------------------------------------------------------------
 rec <- ggplot(herring, aes(x = year, y = recruits))  + 
   theme_bw() +  
-  geom_point(na.rm = F)+
-  geom_line(size=1) +
+  geom_line(na.rm=T, linewidth=1) +
+  geom_point(na.rm=T, size=1.5)+
+  scale_x_continuous(breaks = seq(0,2022,5),minor_breaks = seq(0,2022,1))+
   xlab("Year") +
   ylab("Recruitment")
 
 nodev <- ggplot(herring, aes(x = year, y = R.no.devs))  + 
   theme_bw() +  
-  geom_point(na.rm = F)+
-  geom_line(size=1) +
+  geom_line(na.rm=T, linewidth=1) +
+  geom_point(na.rm=T, size=1.5)+
+  scale_x_continuous(breaks = seq(0,2022,5),minor_breaks = seq(0,2022,1))+
   xlab("Year") +
   ylab("Recruitment (No devs)")
-# is this estimated from stock recruit function
+#AR1 means?
 
 logdevs <- ggplot(herring, aes(x = year, y = logR.dev))  + 
   theme_bw() +  
-  geom_point(na.rm = F)+
-  geom_line(size=1) +
+  geom_line(na.rm=T, linewidth=1) +
+  geom_point(na.rm=T, size=1.5)+
+  scale_x_continuous(breaks = seq(0,2022,5),minor_breaks = seq(0,2022,1))+
   xlab("Year") +
   ylab("Log Recruitment Deviations")
 
 srresid <- ggplot(herring, aes(x = year, y = SR.std.resid))  + 
   theme_bw() +  
-  geom_point(na.rm = F)+
-  geom_line(size=1) +
+  geom_line(na.rm=T, linewidth=1) +
+  geom_point(na.rm=T, size=1.5)+
+  scale_x_continuous(breaks = seq(0,2022,5),minor_breaks = seq(0,2022,1))+
   xlab("Year") +
   ylab("Stock-Recruit Residuals (Standardized)")
 
 ssb <- ggplot(herring, aes(x = year, y = SSB))  + 
   theme_bw() +  
-  geom_point(na.rm = F)+
-  geom_line(size=1) +
+  geom_line(na.rm=T, linewidth=1) +
+  geom_point(na.rm=T, size=1.5)+
+  scale_x_continuous(breaks = seq(0,2022,5),minor_breaks = seq(0,2022,1))+
   xlab("Year") +
   ylab("SSB")
 
 SPR <-  ggplot(herring, aes(x = year, y = SPR))  + 
   theme_bw() +  
-  geom_point(na.rm = F)+
-  geom_line(size=1) +
+  geom_line(na.rm=T, linewidth=1) +
+  geom_point(na.rm=T, size=1.5)+
+  scale_x_continuous(breaks = seq(0,2022,5),minor_breaks = seq(0,2022,1))+
   xlab("Year") +
   ylab("Spawning potential ratio")
 
 Rs <- ggplot(herring, aes(x = year, y = Rs))  + 
   theme_bw() +  
-  geom_point(na.rm = F)+
-  geom_line(size=1) +
+  geom_line(na.rm=T, linewidth=1) +
+  geom_point(na.rm=T, size=1.5)+
+  scale_x_continuous(breaks = seq(0,2022,5),minor_breaks = seq(0,2022,1))+
   xlab("Year") +
   ylab("Spawning Success (Rt/SSBt-1")
 
 # Combine and save
 #tiff("Recruitment Indices.tiff", width = 8, height = 6, units = 'in', res = 300)
-#ggarrange(ssb, rec, SPR, srresid,  nodev, Rs, logdevs)
+ggarrange(ssb, rec, SPR, srresid,  nodev, Rs, logdevs)
 #dev.off()
+
+# NEW DATA ----------------------------------------------------------------
+######## Load in Sarah's plankton indices 
+springcalfinindex <- readRDS(here::here('Data/springcalfinindex.rds'))
+
+springlgcopepodALLindex <- readRDS(here::here('Data/springlgcopepodALLindex.rds'))
+springlg_wide <- springlgcopepodALLindex |> tidyr::pivot_wider(names_from = Var, values_from = Value)
+
+fallsmcopepodALLindex <- readRDS(here::here('Data/fallsmcopepodALLindex.rds'))
+
+#fallsmcopepodSOEindex <- readRDS(here::here('Data/fallsmcopepodSOEindex.rds'))
+#fallsm_wide_SOE <- fallsmcopepodSOEindex |> tidyr::pivot_wider(names_from = Var, values_from = Value)
+
+# Look at plots to decide which of these to select 
+
+# 1. fall small (1 year lag to represent food in early larval stage) 
+# Sarah has both the soe version and her version with diff spp and strata?
+# Should see if this matches my calanus c5 in gom fall w one year lag b/c represents same process
+names(fallsmcopepodALLindex)
+ggplot(fallsmcopepodALLindex, aes(x=Time, y =Value, col=EPU, group=EPU))+
+  geom_line(na.rm=T)+
+  geom_point(na.rm=T)+
+  facet_wrap(~Var)
+
+# Select areas and vars
+fall.sm <- fallsmcopepodALLindex %>%
+  dplyr::filter(Var =="Fall Small copepods ALL Abundance Index Estimate") %>%
+  dplyr::select(Time, Var, EPU, Value) %>%
+  dplyr::filter(EPU=="her_fa")  %>%
+  dplyr::rename(year=Time,
+                logfall.sm = Value)  %>%
+  dplyr::select(year, logfall.sm)
+  
+# 2. small spring (really winter) - don't have, should have
+# 3. large spring - try calanus spring for this
+
+springcalfinindex  %>%
+  dplyr::filter(Var=="Spring Calanus finmarchicus Abundance Index Estimate")  %>%
+  ggplot(aes(x=Time, y =Value, col=EPU, group=EPU))+
+  geom_line(na.rm=T)+
+  geom_point(na.rm=T)+
+  facet_wrap(~EPU)
+# hmm none of these "look great
+
+#also try sarahs large b/c it includes more spp
+springlgcopepodALLindex  %>%
+  dplyr::filter(Var=="Spring Large copepods ALL Abundance Index Estimate" )  %>%
+  ggplot(aes(x=Time, y =Value, col=EPU, group=EPU))+
+  geom_line(na.rm=T)+
+  geom_point(na.rm=T)+
+  facet_wrap(~EPU)
+# these look pretty much the same
+
+spring.lg <-   springlgcopepodALLindex  %>%
+  dplyr::filter(Var=="Spring Large copepods ALL Abundance Index Estimate" )  %>%
+  dplyr::filter(EPU=="her_fa")  %>%
+  dplyr::rename(year=Time,
+                spring.lg = Value)  %>%
+  dplyr::select(year, spring.lg)
+# and new model outputs from mm 192
+# import updated recruitment timeseries
+mm192 <- readRDS(here::here('Data/mm192/mm192.rds'))
+# somehow need to extract the first column of the NAA object 
+mm192 <- readRDS(here::here('Data/mm192/res_tables/stock_1_region_1_NAA_table.rds'))
+str(mm192)
+names(mm192_1)
+mm192_1 <- as.data.frame(mm192)
+mm192_1$year <- as.numeric(row.names(mm192_1))
+
+ggplot(mm192_1, aes(x=year, y=`1`))+
+  geom_point(na.rm = T)+
+  geom_line(na.rm=T)
 
 # "Smart" Lags ------------------------------------------------------------
 
 ##################### Temperature data 
-# SST: conditions for prespawn adults (up to 3 years) 
-# BT: egg temperatures (1-2 Years)
-Temp_lags <- merge(BT.An, OISST.Annual, by = "year", all.x = TRUE, all.y = T)%>%
+# SST: 0 lag for larvae and juveniles (GoM & GB, should this be strat area instead), up to 4 years for prespawn adults
+# BT: 1 year lag for egg & YSL temperatures (GoM/GB only)
+
+Temp_lags <- merge(BT.All, OISST.All, by = "year", all.x = TRUE, all.y = T)%>%
   arrange(year) %>%
   mutate(OISST_1 = lag(OISST,1),
          OISST_2 = lag(OISST,2),
          OISST_3 = lag(OISST,3),
-         BT_1 = lag(BT,1),
-         BT_2 = lag(BT,2))
+         OISST_4 = lag(OISST,4),
+         #BT_1 = lag(BT,1),
+         #BT_2 = lag(BT,2),
+         BT.GOM_1 = lag(BT.GOM, 1),
+         BT.GB_1 = lag(BT.GB, 1))
 
 ###################### Environmental indices
 #(not including slope water, gsi or cold pool, Up to 5 years for winter NAO (see Groger))
-# HW: no lag (larval conditions), up to 3 year lag (conditions for prespawn adults)
-# Hmm might want to add bottom heatwave instead of surface here
+# HMM maybe i should though, one year lag on water bodies may impact early larval drift in fall
+# HW: no lag (juvenile conditions), up to 4 year lag (conditions for prespawn adults)
+# Hmm might want to also include bottom heatwave with 1 year lag for larval conditions (these are surface)
 Env_lags <- merge(HW.An, winterNAO_PC, by = "year", all.x = TRUE, all.y = T) %>%
   arrange(year) %>%
   mutate(HW_1 = lag(HW,1),
          HW_2 = lag(HW,2),
          HW_3 = lag(HW,3),
+         HW_4 = lag(HW,4),
          NAOIndex_1= lag(NAOIndex,1),
          NAOIndex_2= lag(NAOIndex,2),
          NAOIndex_3= lag(NAOIndex,3),
          NAOIndex_4= lag(NAOIndex,4),
          NAOIndex_5= lag(NAOIndex,5))
 
-##################### Production
-# Hmm not totally sure the justification here, and they always come out, so maybe don't even bother
-Prod_lags <- merge(Chla.An, PPD.An, by = "year", all.x = TRUE, all.y = T) %>%
-  arrange(year) %>%
-  mutate(ChlA_1 = lag(ChlA,1),
-         ChlA_2 = lag(ChlA,2),
-         ChlA_3 = lag(ChlA,3),
-         PPD_1= lag(PPD,1),
-         PPD_2= lag(PPD,2),
-         PPD_3= lag(PPD,3))
-
 ###################### Predation
-#benthic egg predation, 1 year lag for both mackerel and haddock
-Pred_lags <- predators%>%
+# benthic egg predation, 1 year lag for both haddock stocks
+# predation and competition with larvae, 1 yaer for jellies in GB & GOM
+Pred_lags <- merge(predators, jelly.Reg, by = "year", all.x = TRUE, all.y = T) %>%
   arrange(year) %>%
   mutate(HadSSB_GB_1 = lag(HadSSB_GB,1),
-         HadSSB_GoM_1 = lag(HadSSB_GoM,1))
+         HadSSB_GoM_1 = lag(HadSSB_GoM,1),
+         jelly.GB_1 = lag(HadSSB_GB,1),
+         jelly.GOM_1 = lag(HadSSB_GB,1))
 
-###################### Food --> not updated, 
-# Adult food, total zoo abundance, 1 year lag --> no longer using this
-#ZooAbun.An_1 <- data.frame(year=ZooAbun.An$year+1,ZooAbun_1=ZooAbun.An$ZooAbun)
-#ZooAbun.An_1 <- ZooAbun.An_1[-c(nrow(ZooAbun.An_1)),] 
-
-# Use this instead
+###################### Food 
+# 1 - 3 year lag is for adult food, 0 year largecal is for juveniles
 largecal <-  largecal %>%
   arrange(year) %>%
   mutate(Lg.cal.abun_1 = lag(Lg.cal.abun, 1),
          Lg.cal.abun_2 = lag(Lg.cal.abun, 2),
          Lg.cal.abun_3 = lag(Lg.cal.abun, 3))
+# maybe also add one of sarah's indices here....
+
 
 # 2. Early larvae food, small copepods (include both 0 and 1 year lag)
 smallcal <-  smallcal %>%
@@ -647,39 +798,59 @@ cfin.GoM.C5 <- cfin.GoM.C5 %>%
   mutate(Cfin.C5_1 = lag(Cfin.C5, 1))
 
 # Combine  Physical Variables ---------------------------------------------
-# Full list of ALL possible
-env.full <- list(Env_lags, Temp_lags, Prod_lags, WSW, CP) # work on this, might want to also include the regionals but I don't have lags for those ugh
 
-env.vars <- list(BT.An, BT.An_1, Bt.Reg, 
-                 OISST.Annual, OISST.An_1, OISST.Reg, 
+# Full list of ALL possible w lags
+env.full.lag <- list(Env_lags, Temp_lags, Prod_lags, WSW, CP) # work on this
+#might want to also include the regionals but I don't have lags for those ugh
+
+# Full list of ALL possible without lags
+env.full <- list(BT.All, OISST.All, 
                  HW.An, HW.Reg,
                  GSI.Annual, CP, WSW, winterNAO_PC) 
+env.full <- env.full %>% reduce(full_join, by='year')  %>%
+  arrange(year)
 
 # Pared down list
-env.vars <- list(BT.An, BT.An_1, OISST.Annual, OISST.An_1, HW.An, GSI.Annual, WSW) # no cold pool?
+#env.vars <- list(BT.An, BT.An_1, OISST.Annual, OISST.An_1, HW.An, GSI.Annual, WSW) # no cold pool?
 
 # Chop off extra years
-env.vars <- env.vars %>% reduce(full_join, by='year')
-
+#env.vars <- env.vars %>% reduce(full_join, by='year')
 
 # Combine Biological Variables ------------------------------------------------------
 
-# Full list of ALL possible
-
-ecological.vars <- list(predators, predators_1, 
+# Full list of ALL possible w lags --> work on this
+eco.full.lag <- list(predators, predators_1, 
                         Chla.An, PPD.An, 
                         jelly, smallcal, smallcal_1, ZooAbun.An, ZooAbun.An_1, cfin.GoM.C5, cfin.GoM.C5_1)
-eco.vars <- ecological.vars %>% reduce(full_join, by='year')
+eco.full.lag <- eco.full.lag %>% reduce(full_join, by='year')
 
+# Full list of ALL possible without lags
+eco.full <- list(Chl.fall.season, predators,
+                 jelly.An, jelly.Reg,
+                 c5fall_GoM, calfin.An, calfin.Reg,
+                 lgcope.An, lgcope.Reg,
+                 smcope.An, smcope.Reg)
 
+eco.full <- eco.full %>% reduce(full_join, by='year') %>%
+  arrange(year)
 
-# Join biological and environmental variables  -----------------------------------------
-
-variables <- merge(eco.vars, env.vars,
-                   by = "year", 
-                   all.x = TRUE, all.y = T)
-names(variables)
+# Join variables & herring data  -----------------------------------------
+vars.full <- merge(eco.full, env.full, by = "year", all.x = TRUE, all.y = T)
+#variables <- merge(eco.vars, env.vars, by = "year", all.x = TRUE, all.y = T)
 
 # Export and save
-write.csv(variables, file = "Data/Variables_smartlag.csv", row.names = F)
+#write.csv(variables, file = "Data/Variables_smartlag.csv", row.names = F)
+
+# Combine the data called herring and variables into one dataframe
+dat.full <- merge(herring, vars.full, by = "year",  all.x = TRUE, all.y = T)
+
+#combined.dat <-merge(herring, variables, by = "year",  all.x = TRUE, all.y = T)
+#str(combined.dat) # lots of NA's still
+range(dat.full$year)
+# chop it down
+#combined.dat <- combined.dat %>% filter(between(year,1982,2019))
+dat.full <- dat.full %>% filter(between(year,1982,2021))
+
+# Export to reload easily into quarto/rmd
+#write.csv(combined.dat4, file = "Data/Combined_lags.csv", row.names = F)
 

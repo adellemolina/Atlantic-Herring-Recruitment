@@ -1,8 +1,8 @@
 ##      Title:            Herring Recruitment Boosted Regression Trees
 ##      Author:           Adelle Molina
 ##      Created:          4/28/23
-##      Updated:          2/19/24
-##      Notes:             
+##      Updated:          7/18/24
+##      Notes:            This script has more recent model runs
 
 # Packages ----------------------------------------------------------------
 library(dplyr)
@@ -17,18 +17,12 @@ library(gridExtra)
 
 # Load data ---------------------------------------------------------------
 
-# Combine the data called herring and variables into one dataframe
-combined.dat <-merge(herring, variables,
-                     by = "year", 
-                     all.x = TRUE, all.y = T)
-str(combined.dat) # lots of NA's still
+###############WHICH ONE
 
-# chop it down
-combined.dat <- combined.dat %>% 
-  filter(between(year,1982,2019))
 
-# Export to reload easily into quarto/rmd
-write.csv(combined.dat4, file = "Data/Combined_lags.csv", row.names = F)
+# BRT with WHAM output and Sarah zoo indices ------------------------------
+
+
 
 # BRT for log recruitment deviations ---------
 names(combined.dat)
@@ -38,7 +32,7 @@ ncol(combined.dat)
 #(((BRT.ldev$self.statistics$mean.null)-(BRT.ldev$cv.statistics$deviance.mean))/(BRT.ldev$self.statistics$mean.null))*100 #46 % dev explained 
 #summary(BRT.ldev) # Had, zooabun, sst_1, hw, had_1 --> only ppd and chla had zero relative abundance
 
-# old best with less lags
+# old best with 0 vars removed
 #(((BRT.ldev_2$self.statistics$mean.null)-(BRT.ldev_2$cv.statistics$deviance.mean))/(BRT.ldev_2$self.statistics$mean.null))*100 #52 % dev explained 
 #ri <- summary(BRT.ldev_2) # Had, zooabun, sst_1, hw, had_1 --> none with zero relative abundance
 
@@ -75,7 +69,6 @@ BRT.ldev_3_wlags <-gbm.step(data=combined.dat3,
                             family="gaussian", tree.complexity=1, # (1 = no interactions)
                             learning.rate=0.01, bag.fraction=0.7)
 (((BRT.ldev_3_wlags$self.statistics$mean.null)-(BRT.ldev_3_wlags$cv.statistics$deviance.mean))/(BRT.ldev_3_wlags$self.statistics$mean.null))*100 #38 % dev explained (new is 36)
-# make a fx for this
 summary(BRT.ldev_3_wlags)
 ri <- summary(BRT.ldev_3)
 # Best model for now
