@@ -1,7 +1,7 @@
 ##      Title:            Herring Recruitment Boosted Regression Trees
 ##      Author:           Adelle Molina
 ##      Created:          4/28/23
-##      Updated:          7/18/24
+##      Updated:          8/19/24
 ##      Notes:            This script has more recent model runs
 
 # Packages ----------------------------------------------------------------
@@ -14,20 +14,179 @@ library(ggstatsplot)
 library(gbm)
 library(dismo)
 library(gridExtra)
+#remotes::install_github("gbm-developers/gbm3", build_vignettes = TRUE, force = TRUE)
+library(gbm3)
 
 # Load data ---------------------------------------------------------------
+names(newdat)
 
-###############WHICH ONE
+# Try with other gbm functions (instead of step) ---------------------------
 
+# here using function gbmt
+train_params <- training_params(num_trees = 1000, interaction_depth = 1, min_num_obs_in_node = 5,num_features = 3)
+gauss_fit <- gbmt(recrt~BT.GB_1+BT.GOM_1+c5fall.gom_1+fall.sm_1+spring.lg+HW.GOM_1,
+                  data=newdat, cv_folds =5, keep_gbm_data = TRUE, train_params = train_params, distribution = "gaussian")
+#summary(gauss_fit)
+
+# here using function gbm.fit
+gbm2 <- gbm(logRdev~BT.GB_1+BT.GOM_1+
+              OISST.GB + OISST.GOM+
+              spring.lg + fall.sm_1 + HadSSB_GB+ HadSSB_GoM + HadSSB_GB_1 + HadSSB_GoM_1 + c5fall.gom_1+
+              HW.GB + HW.GOM,         # formula (all columns with . otherwise type out formula)
+            data=newdat,                   # dataset
+            distribution="gaussian",     
+            n.trees=50,                # number of trees
+            shrinkage=0.001,             # shrinkage/learning rate, 0.001 to 0.1 usually work
+            interaction.depth=1,         # 1: additive model, 2: two-way interactions, etc
+            bag.fraction = 0.5,          # subsampling fraction, 0.5 is probably best
+            #train.fraction = 0,        # fraction of data for training, 
+            #mFeatures = 3,               # Number of features to consider at each node.
+            n.minobsinnode = 5,         # minimum number of obs needed in each node (10 is too high for dataset size)
+            keep.data=TRUE,
+            cv.folds=10,                 # do 10-fold cross-validation
+            verbose = F) 
+
+gbm2 # Evaluate model fit
+gbm.perf(gbm2, method = "cv") # this shows loss function
+summary(gbm2)
+# "better" models when I use logRdev as opposed to raw recruitment values
+
+# how do I compute deviance explained? I think one of the two methods below works (one uses all trees the other uses just one)
+abs((last(gbm2$train.error)-last(gbm2$cv_error))/last(gbm2$train.error))*100
+(sum(gbm1$train.error)-sum(gbm1$cv_error))/sum(gbm1$train.error)*100
+
+# pretty plot of relative influence
+effects <- tibble::as_tibble(summary(gbm3))
+effects %>% 
+  # arrange descending to get the top influencers
+  dplyr::arrange(desc(rel_inf)) %>%
+  # plot these data using columns
+  ggplot(aes(x = forcats::fct_reorder(.f = var, 
+                                      .x = rel_inf), 
+             y = rel_inf, 
+             fill = rel_inf)) +
+  geom_col() +
+  coord_flip() +
+  scale_color_brewer(palette = "Dark2") +
+  theme(axis.title = element_text()) + 
+  xlab('Features') +
+  theme_bw()+
+  ylab('Relative Influence') +
+  ggtitle("Top Drivers of Recruitment")
+
+# Play with gbm3 functions to eval model ----------------------------------
+
+# explore the model and other functions in the pacakge
+plot(gbm2, var_index = 5)
+#vip::vip(gbm2) 
+str(gbm2)
+#permutation_relative_influence(gbm3, num_trees = 50) # i think this is to add trees --> do if you need more iteration
+
+# predict to the data, 
+gbm_pred <- predict(object = gbm2,  newdata = newdat,n.trees = 50, type="link")
+# trying to plot the fit relative to the actual data but the scales are wrong (multiply by 100 got us there even though that prob isn't right)
+ggplot(newdat, aes(x=year))+
+  geom_line(aes(y=100*gbm2$fit))+
+  geom_line(aes(y=logRdev), col="red")
+
+
+best.iter <- gbm.perf(gbm2, method = "cv")
+
+Yhat <- predict(gbm2, newdata = newdat, n.trees = best.iter, type = "link")
+print(sum((newdat$logRdev - Yhat)^2))# least squares error
+
+# plot marginal effectfor one variable at a time
+plot(gbm3)
+
+
+
+# GBM3 without correlated vars --------------------------------------------
+# added gbm4 with interaction depth set to 2....
+
+# Try with correlated variables removed
+gbm4 <- gbm(logRdev~BT.GB_1+BT.GOM_1+ OISST.GB + OISST.GOM+
+              spring.lg + fall.sm_1 +  HadSSB_GB_1 + HadSSB_GoM_1 +
+              HW.GB + HW.GOM,        
+            data=newdat,                   # dataset
+            distribution="gaussian",     
+            n.trees=5000,                
+            shrinkage=0.0005,             
+            interaction.depth=1,         
+            bag.fraction = 0.5,                
+            n.minobsinnode = 5,         
+            keep.data=TRUE,
+            cv.folds=10,                 
+            verbose = F) 
+gbm.perf(gbm4, method = "cv") # this shows loss function
+sqrt((gbm4$train.error[1]-gbm4$cv_error[1])/gbm4$train.error[1])
+hist(newdat$logRdev)
+sqrt(gbm4$cv_error[1])
+sqrt(gbm4$train.error[1])
+gbm4 # Evaluate model fit (lower pseudo R than gbm2)
+gbm.perf(gbm4, method = "cv") # this shows loss function
+summary(gbm4)
+abs((last(gbm3$train.error)-last(gbm3$cv_error))/last(gbm3$train.error))*100 # very low fake dev explained
+
+# Plot that
+effects_gbm4 <- tibble::as_tibble(summary(gbm4))
+effects_plot <- effects_gbm4 %>% 
+  # arrange descending to get the top influencers
+  dplyr::arrange(desc(rel_inf)) %>%
+  # plot these data using columns
+  ggplot(aes(x = forcats::fct_reorder(.f = var, 
+                                      .x = rel_inf), 
+             y = rel_inf, 
+             fill = rel_inf)) +
+  geom_col() +
+  coord_flip() +
+  scale_color_brewer(palette = "Dark2") +
+  theme(axis.title = element_text()) + 
+  xlab('Features') +
+  theme_bw()+
+  ylab('Relative Influence') +
+  ggtitle("Top Drivers of Recruitment")
+
+effects_plot
+
+ggsave("newBRT.png", width = 8, height = 6)
+
+# using the parameters from gbm.fit, rerun using gbm.step with those values
+BRT.mm192_opt <-gbm.step(data=newdat,
+                         gbm.x=c(5:16), minobsinnode=5,
+                         gbm.y=4, # mm192 log recruitment deviations
+                         family="gaussian", tree.complexity=1, # (1 = no interactions)
+                         learning.rate=0.0001, bag.fraction=0.5, n.trees = 1000, n.folds = 10) # doesn't run? 
 
 # BRT with WHAM output and Sarah zoo indices ------------------------------
+BRT.mm192_raw <-gbm.step(data=newdat,
+                         gbm.x=c(5:ncol(newdat)), 
+                         gbm.y=2, # mm192 recruits
+                         family="gaussian", tree.complexity=1, # (1 = no interactions)
+                         learning.rate=0.05, bag.fraction=0.7)
+dev.exp(BRT.mm192_raw)
+
+BRT.mm192 <-gbm.step(data=newdat,
+                          gbm.x=c(5:ncol(newdat)), 
+                          gbm.y=4, # mm192 log recruits
+                          family="gaussian", tree.complexity=1, # (1 = no interactions)
+                          learning.rate=0.00001, bag.fraction=0.7) # why is LR so diff from raw model
+dev.exp(BRT.mm192)
+#WHAM$logR <- as.integer(WHAM$logR)
+
+BRT.mm192_bio <-gbm.step(data=newdat,
+                     gbm.x=c(5:ncol(newdat)), 
+                     gbm.y=4, # mm192 log deviations
+                     family="gaussian", tree.complexity=1, # (1 = no interactions)
+                     learning.rate=0.000005, bag.fraction=0.8)
 
 
+#(((BRT.mm192_raw$self.statistics$mean.null)-(BRT.mm192_raw$cv.statistics$deviance.mean))/(BRT.mm192_bio$self.statistics$mean.null))*100 
+(1.114876e+13 -1.08101e+13)/1.114876e+13 # very low calculated deviance explained for this model
 
 # BRT for log recruitment deviations ---------
 names(combined.dat)
 ncol(combined.dat)
-
+summary(BRT.mm192_raw)
 # old best
 #(((BRT.ldev$self.statistics$mean.null)-(BRT.ldev$cv.statistics$deviance.mean))/(BRT.ldev$self.statistics$mean.null))*100 #46 % dev explained 
 #summary(BRT.ldev) # Had, zooabun, sst_1, hw, had_1 --> only ppd and chla had zero relative abundance

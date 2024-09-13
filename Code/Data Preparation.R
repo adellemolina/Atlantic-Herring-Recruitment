@@ -2,10 +2,9 @@
 ##      Script Purpose:   Prepare multivariate time series for analysis
 ##      Author:           Adelle Molina
 ##      Created:          7/22/22
-##      Updated:          7/19/24
-##      Notes:            Add area heatwave index & area oisst anoms? Change oisst source data
-##      To Do:            See notes for what lags to add and change in "smart" lag section
-##                            & combine new data/variables
+##      Updated:          8/19/24
+##      Notes:            Change temp source data (to what)
+##      To Do:            
 # Libraries ---------------------------------------------------------------
 #remotes::install_github("noaa-edab/ecodata",build_vignettes=TRUE)
 library(ecodata)
@@ -34,6 +33,7 @@ EPUwt <- ecodata::epu_sf%>%
 #     A. OISST -------------------------------------------------------------------
 # Manually downloaded daily mean SST (1982-present) from https://psl.noaa.gov/data/gridded/data.noaa.oisst.v2.highres.html
 # In "get sst data" script" computed daily mean by EPU, combined, and exported, load that in
+# perhaps something like daily max or daily var is better...
 OISST  <- read.csv(here::here('Data/OISST.csv'), header = T, blank.lines.skip = T)
 
 # Calculate basin wide annual mean (no area weighting)
@@ -189,7 +189,8 @@ HW.Reg <- HW %>%
   dplyr::rename(HW.GB=GB,
                 HW.GOM=GOM,
                 HW.MAB=MAB,
-                year = Time)
+                year = Time) %>%
+  dplyr::select(!HW.MAB)
 
 # Winter NAO from Hurrell website (use this one)
 #https://climatedataguide.ucar.edu/climate-data/hurrell-north-atlantic-oscillation-nao-index-station-based
@@ -261,8 +262,9 @@ dev.off()
 # Haddock SSB (Retrospective Adjusted from 2022 Assessment (for both GoM and GB)
 # Should I add mackerel back in (don't think so) but def try with Micah's index instead of both Had separate
 predators <- read.csv(here::here('Data/Pred_Assessment.csv'))
-predators <- predators%>% 
-  dplyr::select(year, HadSSB_GB, HadSSB_GoM)
+#predators <- predators%>% 
+  #dplyr::select(year, HadSSB_GB, HadSSB_GoM)%>% 
+  #dplyr::mutate(HadSSB_GoM=log(HadSSB_GoM),HadSSB_GB=log(HadSSB_GB))
 
 #Plot
 ts.had.GoM  <- ggplot(predators, aes(x = year, y = HadSSB_GoM))  + 
@@ -271,7 +273,7 @@ ts.had.GoM  <- ggplot(predators, aes(x = year, y = HadSSB_GoM))  +
   geom_point(na.rm=T, size=1.5)+
   scale_x_continuous(breaks = seq(0,2022,5),minor_breaks = seq(0,2022,1))+
   xlab("Year") +
-  ylab("GoM Haddock SSB (metric tons)")
+  ylab("log GoM Haddock SSB (metric tons)")
 
 ts.had.GB  <- ggplot(predators, aes(x = year, y = HadSSB_GB))  + 
   theme_bw() +  
@@ -292,7 +294,6 @@ ggarrange(ts.had.GoM, ts.had.GB)
 dev.off()
 
 #B. Competitors
-
 # Make object from zooplankton anomalies indicator and add area weights
 zoodat <- ecodata::zoo_abundance_anom %>% 
   full_join(EPUwt, by="EPU")%>%
@@ -309,7 +310,7 @@ jelly.Reg <- zoodat%>%
                 jelly.GOM=GOM,
                 jelly.MAB=MAB)
 
-# Cnidaria basin wide
+# Cnidaria basin wide --> this doesn't make sense b/c you shouldn't average an anomalie
 jelly.An <- zoodat%>% 
   dplyr::filter(Var==c("Cnidaria"))%>%
   dplyr::group_by(year) %>%
@@ -384,7 +385,7 @@ c5fall <- ecodata::calanus_stage %>%
 # Pull out GoM timeseries of fall stage c5 
 c5fall_GoM <- c5fall%>%
   dplyr::filter(EPU==c("GOM"))%>%
-  mutate(Value=log(Value)) %>%
+  #mutate(Value=log(Value)) %>%
   dplyr::rename(year=Time,
                 c5fall.gom=Value)%>%
   dplyr::select(year, c5fall.gom)
@@ -661,10 +662,8 @@ ggarrange(ssb, rec, SPR, srresid,  nodev, Rs, logdevs)
 # NEW DATA ----------------------------------------------------------------
 ######## Load in Sarah's plankton indices 
 springcalfinindex <- readRDS(here::here('Data/springcalfinindex.rds'))
-
 springlgcopepodALLindex <- readRDS(here::here('Data/springlgcopepodALLindex.rds'))
 springlg_wide <- springlgcopepodALLindex |> tidyr::pivot_wider(names_from = Var, values_from = Value)
-
 fallsmcopepodALLindex <- readRDS(here::here('Data/fallsmcopepodALLindex.rds'))
 
 #fallsmcopepodSOEindex <- readRDS(here::here('Data/fallsmcopepodSOEindex.rds'))
@@ -674,8 +673,8 @@ fallsmcopepodALLindex <- readRDS(here::here('Data/fallsmcopepodALLindex.rds'))
 
 # 1. fall small (1 year lag to represent food in early larval stage) 
 # Sarah has both the soe version and her version with diff spp and strata?
-# Should see if this matches my calanus c5 in gom fall w one year lag b/c represents same process
-names(fallsmcopepodALLindex)
+# Should see if this matches my calanus c5 in gom fall w one year lag b/c represents similar process
+# plot
 ggplot(fallsmcopepodALLindex, aes(x=Time, y =Value, col=EPU, group=EPU))+
   geom_line(na.rm=T)+
   geom_point(na.rm=T)+
@@ -684,22 +683,26 @@ ggplot(fallsmcopepodALLindex, aes(x=Time, y =Value, col=EPU, group=EPU))+
 # Select areas and vars
 fall.sm <- fallsmcopepodALLindex %>%
   dplyr::filter(Var =="Fall Small copepods ALL Abundance Index Estimate") %>%
-  dplyr::select(Time, Var, EPU, Value) %>%
   dplyr::filter(EPU=="her_fa")  %>%
   dplyr::rename(year=Time,
-                logfall.sm = Value)  %>%
-  dplyr::select(year, logfall.sm)
-  
-# 2. small spring (really winter) - don't have, should have
+                fall.sm = Value) %>%
+  #dplyr::mutate(fall.sm=log(fall.sm)) %>%
+  dplyr::select(year, fall.sm)
+
+# replace the 0 with na
+fall.sm[fall.sm==0] <- NA
+#as.na(fall.sm) <- sapply(fall.sm, is.infinite)
+
+# 2. small spring (really winter) - don't have, maybe should although by winter they are late larvae
 # 3. large spring - try calanus spring for this
 
+# plot
 springcalfinindex  %>%
   dplyr::filter(Var=="Spring Calanus finmarchicus Abundance Index Estimate")  %>%
   ggplot(aes(x=Time, y =Value, col=EPU, group=EPU))+
   geom_line(na.rm=T)+
   geom_point(na.rm=T)+
   facet_wrap(~EPU)
-# hmm none of these "look great
 
 #also try sarahs large b/c it includes more spp
 springlgcopepodALLindex  %>%
@@ -710,105 +713,115 @@ springlgcopepodALLindex  %>%
   facet_wrap(~EPU)
 # these look pretty much the same
 
+# select area and index
 spring.lg <-   springlgcopepodALLindex  %>%
   dplyr::filter(Var=="Spring Large copepods ALL Abundance Index Estimate" )  %>%
-  dplyr::filter(EPU=="her_fa")  %>%
+  dplyr::filter(EPU=="her_sp")  %>%
   dplyr::rename(year=Time,
                 spring.lg = Value)  %>%
+  #dplyr::mutate(spring.lg=log(spring.lg)) %>%
   dplyr::select(year, spring.lg)
+
 # and new model outputs from mm 192
 # import updated recruitment timeseries
-mm192 <- readRDS(here::here('Data/mm192/mm192.rds'))
+#mm192 <- readRDS(here::here('Data/mm192/mm192.rds'))
 # somehow need to extract the first column of the NAA object 
 mm192 <- readRDS(here::here('Data/mm192/res_tables/stock_1_region_1_NAA_table.rds'))
 str(mm192)
 names(mm192_1)
 mm192_1 <- as.data.frame(mm192)
 mm192_1$year <- as.numeric(row.names(mm192_1))
+WHAM <- mm192_1  %>%
+  dplyr::select(year, '1') %>%
+  dplyr::rename(recrt = '1')%>%
+  dplyr::mutate(logR = log(recrt),
+                logRdev = logR - mean(logR))
 
-ggplot(mm192_1, aes(x=year, y=`1`))+
-  geom_point(na.rm = T)+
-  geom_line(na.rm=T)
+ggplot(WHAM, aes(x=year, y=logRdev))+
+  theme_bw()+  
+  geom_line(na.rm=T, linewidth=1) +
+  geom_point(na.rm=T, size=1.5)+
+  scale_x_continuous(breaks = seq(0,2022,5),minor_breaks = seq(0,2022,1))+
+  xlab("Year") +
+  ylab("log Recruitment deviations")
+
+ggplot(WHAM, aes(x=year, y=recrt))+
+  theme_bw()+  
+  geom_line(na.rm=T, linewidth=1) +
+  geom_point(na.rm=T, size=1.5)+
+  scale_x_continuous(breaks = seq(0,2022,5),minor_breaks = seq(0,2022,1))+
+  xlab("Year") +
+  ylab("Recruitment")
 
 # "Smart" Lags ------------------------------------------------------------
 
 ##################### Temperature data 
-# SST: 0 lag for larvae and juveniles (GoM & GB, should this be strat area instead), up to 4 years for prespawn adults
+# SST: 0 lag for larvae and juveniles (just GoM & GB)
+# SST: up to 4 years for prespawn adults (all areas)
 # BT: 1 year lag for egg & YSL temperatures (GoM/GB only)
-
 Temp_lags <- merge(BT.All, OISST.All, by = "year", all.x = TRUE, all.y = T)%>%
   arrange(year) %>%
   mutate(OISST_1 = lag(OISST,1),
-         OISST_2 = lag(OISST,2),
-         OISST_3 = lag(OISST,3),
-         OISST_4 = lag(OISST,4),
+         #OISST_2 = lag(OISST,2),
+         #OISST_3 = lag(OISST,3),
+         #OISST_4 = lag(OISST,4),
          #BT_1 = lag(BT,1),
          #BT_2 = lag(BT,2),
          BT.GOM_1 = lag(BT.GOM, 1),
-         BT.GB_1 = lag(BT.GB, 1))
+         BT.GB_1 = lag(BT.GB, 1))%>%
+  dplyr::select(c(year, BT.GB_1 ,BT.GOM_1,OISST.GB, OISST.GOM)) # only select what we want
 
 ###################### Environmental indices
-#(not including slope water, gsi or cold pool, Up to 5 years for winter NAO (see Groger))
-# HMM maybe i should though, one year lag on water bodies may impact early larval drift in fall
-# HW: no lag (juvenile conditions), up to 4 year lag (conditions for prespawn adults)
-# Hmm might want to also include bottom heatwave with 1 year lag for larval conditions (these are surface)
-Env_lags <- merge(HW.An, winterNAO_PC, by = "year", all.x = TRUE, all.y = T) %>%
-  arrange(year) %>%
-  mutate(HW_1 = lag(HW,1),
-         HW_2 = lag(HW,2),
-         HW_3 = lag(HW,3),
-         HW_4 = lag(HW,4),
-         NAOIndex_1= lag(NAOIndex,1),
+#(not including slope water, gsi or cold pool, or hw (missing years) maybe should, b/c one year lag on water bodies may impact early larval drift in fall
+# winter NAO: Up to 5 years (see Groger)
+# HW: no lag (juvenile conditions), 1 year lag (early larvae) (just GB/GoM)
+Env_lags <- merge(HW.Reg, winterNAO_PC, by = "year", all.x = TRUE, all.y = T) %>%
+  mutate(NAOIndex_1= lag(NAOIndex,1),
          NAOIndex_2= lag(NAOIndex,2),
          NAOIndex_3= lag(NAOIndex,3),
-         NAOIndex_4= lag(NAOIndex,4),
-         NAOIndex_5= lag(NAOIndex,5))
+         #NAOIndex_4= lag(NAOIndex,4),
+         #NAOIndex_5= lag(NAOIndex,5),
+         HW.GB_1 = lag(HW.GB, 1),
+         HW.GOM_1 = lag(HW.GOM,1))
 
 ###################### Predation
 # benthic egg predation, 1 year lag for both haddock stocks
-# predation and competition with larvae, 1 yaer for jellies in GB & GOM
-Pred_lags <- merge(predators, jelly.Reg, by = "year", all.x = TRUE, all.y = T) %>%
-  arrange(year) %>%
+# predation and competition with larvae, 1 year for jellies in GB & GOM
+Pred_lags <- predators %>%
   mutate(HadSSB_GB_1 = lag(HadSSB_GB,1),
-         HadSSB_GoM_1 = lag(HadSSB_GoM,1),
-         jelly.GB_1 = lag(HadSSB_GB,1),
-         jelly.GOM_1 = lag(HadSSB_GB,1))
+         HadSSB_GoM_1 = lag(HadSSB_GoM,1))
 
 ###################### Food 
-# 1 - 3 year lag is for adult food, 0 year largecal is for juveniles
-largecal <-  largecal %>%
+# Large copepods: 1 - 3 year lag for adults (only spring, add large fall to represent pre-spawning feeding)
+# Large copepods: 0 year for juveniles and late larvae in spring
+# Small copepods: 1 year lag for early larvae in the fall
+Food_lags <-  merge(spring.lg, fall.sm, by = "year", all.x = TRUE, all.y = T) %>%
   arrange(year) %>%
-  mutate(Lg.cal.abun_1 = lag(Lg.cal.abun, 1),
-         Lg.cal.abun_2 = lag(Lg.cal.abun, 2),
-         Lg.cal.abun_3 = lag(Lg.cal.abun, 3))
-# maybe also add one of sarah's indices here....
+  mutate(#spring.lg_1 = lag(spring.lg, 1),
+         #spring.lg_2 = lag(spring.lg, 2),
+         #spring.lg_3 = lag(spring.lg, 3),
+         fall.sm_1 = lag(fall.sm, 1))
 
+Food_lags%>% 
+  reshape2::melt(id.vars="year", variable.name="series")%>%
+  ggplot(aes(year,value)) +
+  geom_line(na.rm = T)+ 
+  theme_bw()+
+  facet_wrap(~ series, scales = "free")
 
-# 2. Early larvae food, small copepods (include both 0 and 1 year lag)
-smallcal <-  smallcal %>%
-  arrange(year) %>%
-  mutate(Sm.cal.abun_1 = lag(Sm.cal.abun, 1))
-
-# 3. Calanus finmarchicus stage 5 in fall in the GoM (early larval food in one area)
-cfin.GoM.C5 <- cfin.GoM.C5 %>%
-  dplyr::rename(year=Year) %>%
-  dplyr::select(year, Value) %>%
-  dplyr::rename(Cfin.C5=Value)%>%
-  arrange(year) %>%
-  mutate(Cfin.C5_1 = lag(Cfin.C5, 1))
+# Calanus finmarchicus stage 5 in fall in the GoM (species and stage specific early larval food in one area)
+c5fall_GoM_lag <- c5fall_GoM %>%
+  mutate(c5fall.gom_1 = lag(c5fall.gom, 1))
 
 # Combine  Physical Variables ---------------------------------------------
 
 # Full list of ALL possible w lags
-env.full.lag <- list(Env_lags, Temp_lags, Prod_lags, WSW, CP) # work on this
+#env.full.lag <- list(Env_lags, Temp_lags, Prod_lags, WSW, CP) # work on this
 #might want to also include the regionals but I don't have lags for those ugh
 
 # Full list of ALL possible without lags
-env.full <- list(BT.All, OISST.All, 
-                 HW.An, HW.Reg,
-                 GSI.Annual, CP, WSW, winterNAO_PC) 
-env.full <- env.full %>% reduce(full_join, by='year')  %>%
-  arrange(year)
+#env.full <- list(BT.All, OISST.All, HW.An, HW.Reg,GSI.Annual, CP, WSW, winterNAO_PC) 
+#env.full <- env.full %>% reduce(full_join, by='year')  %>% arrange(year)
 
 # Pared down list
 #env.vars <- list(BT.An, BT.An_1, OISST.Annual, OISST.An_1, HW.An, GSI.Annual, WSW) # no cold pool?
@@ -824,7 +837,7 @@ eco.full.lag <- list(predators, predators_1,
                         jelly, smallcal, smallcal_1, ZooAbun.An, ZooAbun.An_1, cfin.GoM.C5, cfin.GoM.C5_1)
 eco.full.lag <- eco.full.lag %>% reduce(full_join, by='year')
 
-# Full list of ALL possible without lags
+# Full list of ALL possible without lags --> not updated with Sarah's indices
 eco.full <- list(Chl.fall.season, predators,
                  jelly.An, jelly.Reg,
                  c5fall_GoM, calfin.An, calfin.Reg,
@@ -835,22 +848,57 @@ eco.full <- eco.full %>% reduce(full_join, by='year') %>%
   arrange(year)
 
 # Join variables & herring data  -----------------------------------------
-vars.full <- merge(eco.full, env.full, by = "year", all.x = TRUE, all.y = T)
+# adding new data - combine only smart lags and possibly important vars
+smart_vars <- list(Temp_lags, Food_lags, Pred_lags, c5fall_GoM_lag , Env_lags) 
+smart_vars <- smart_vars %>% reduce(full_join, by='year')
+
+##### 
+#vars.full <- merge(eco.full, env.full, by = "year", all.x = TRUE, all.y = T)
 #variables <- merge(eco.vars, env.vars, by = "year", all.x = TRUE, all.y = T)
 
 # Export and save
 #write.csv(variables, file = "Data/Variables_smartlag.csv", row.names = F)
 
 # Combine the data called herring and variables into one dataframe
-dat.full <- merge(herring, vars.full, by = "year",  all.x = TRUE, all.y = T)
-
+#dat.full <- merge(herring, vars.full, by = "year",  all.x = TRUE, all.y = T)
 #combined.dat <-merge(herring, variables, by = "year",  all.x = TRUE, all.y = T)
-#str(combined.dat) # lots of NA's still
-range(dat.full$year)
+newdat <- merge(WHAM, smart_vars, by = "year",  all.x = TRUE, all.y = T)
+
 # chop it down
 #combined.dat <- combined.dat %>% filter(between(year,1982,2019))
-dat.full <- dat.full %>% filter(between(year,1982,2021))
+#dat.full <- dat.full %>% filter(between(year,1982,2021))
+newdat <- newdat %>% filter(between(year,1987,2023))
 
+# plot all
+newdat%>% 
+  reshape2::melt(id.vars="year", variable.name="series")%>%
+  ggplot(aes(year,value)) +
+  geom_line()+ 
+  theme_bw()+
+  facet_wrap(~ series, scales = "free")
+# Trim off columns we don'nt need/want (mostly SS and MAb stuff)
+#newdat <- newdat%>%dplyr::select(-HW.MAB, -BT.MAB, -BT.SS,-OISST.MAB,  -OISST.SS, -fall.sm)
 # Export to reload easily into quarto/rmd
 #write.csv(combined.dat4, file = "Data/Combined_lags.csv", row.names = F)
+
+# look at correlations
+do <- get_upper_tri(cor(as.data.frame(newdat), use="na.or.complete"))
+cormat <- reshape2::melt(do, na.rm=T)
+cor1 <- ggplot(data = cormat, aes(Var2, Var1, fill = value))+
+  geom_tile(color = "white")+
+  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+                       midpoint = 0, limit = c(-1,1), space = "Lab", 
+                       name="Spearman\nCorrelation") +
+  theme_minimal()+ 
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, 
+                                   size = 12, hjust = 1))+
+  coord_fixed()
+cor1     
+
+
+ggplot2::ggplot(ecodata::storminess, aes(x=Year, y=Value, col=Var))+
+  geom_point(na.rm=T)+
+  geom_line(na.rm=T) +
+  facet_wrap(~Var)
+
 
