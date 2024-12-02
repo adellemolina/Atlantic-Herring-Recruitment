@@ -11,77 +11,57 @@ knitr::opts_chunk$set(echo = F)
 
 # Boosted Regression Trees for herring recruitment
 
-Code for getting data, generating time series of possible indicators, plotting recruitment and indicator time series, producing correlation matrices to reduce the list, and running boosted regression trees
+## First Runs with ASAP in 2022
 
-```{r packages, echo = F}
-library(dplyr)
-library(ggplot2)
-library(corrplot)
-library(reshape2)
-library(ggstatsplot)
-library(gbm)
-library(tidyr)
-library(dismo)
-library(gridExtra)
-library(ggcorrplot)
-library(ggpubr)
+-   No herring specific spatial "cropping"
+
+-   Top variables included Haddock SSB (1), Total Zooplankton Abundance, OISST (1), HW, and Mackerel
+
+-   deviance explained was between 32-52 %
+
+-   But several runs had "weird patterns" (signoidal relationship with zooplankton abundance and temperature), exponential with haddock and heat wave, which does make sense
+
+**find image that goes here....! see slides but not sure where the file is**
+
+-   Secondary runs split up zooplankton into cnidaria, krill, and calanus stage 5 in the GoM with a one year lag, now the marginal effects make more sense b/c they aren't
+
+![](images/Partial%20Dependence.tiff)
+
+### Preliminary modelling "conclusions"
+
+-   Dropping the 0 & very low influence variables increased explained deviance
+
+-   Reducing the list slowly/gradually doesn't really help much in terms of deviance explained when you start with too big a list
+
+## Setup
+
+```{r packages, echo = F} library(dplyr) library(ggplot2) library(corrplot) library(reshape2) library(ggstatsplot) library(gbm) library(tidyr) library(dismo) library(gridExtra) library(ggcorrplot)}
 ```
 
-## Data
-
-The data was modified, summarized, compiled and exported in a separate script
-
--   OISST: PSL daily means. Calculated annual mean by and across EPU
--   Bottom Temperature: high resolution daily composite product from four ocean models (as in du Pontavice et al. 2023). Calculated annual mean by and across EPU
--   Environmental indices: From ecodata
-    1.  Heatwave index
-    2.  Cold Pool index
-    3.  Gulf Stream Index
-    4.  Warm Slope Water proportion
--   Food
-    -   Abundance of calanus finmarchicus stage C5 in the GoM in fall
-    -   Zooplankton abundance
-        -   Cnidaria
-        -   small calanoid
-        -   large calanoid
--   Predators
-    -   Haddock index: retrospective adjusted SSB from the GoM Haddock 2019 assessment (what about GB)
--   Biological indices
-    -   Chlorophyll a
-    -   Primary production
--   Herring recruitment outputs from 2022 assessment
-
-```{r data}
-# Load in the combined data 
-dat <- read.csv(here::here('Data/Combined.Data.csv')) # old version
-
-# Load in the variable data and add lags
-
+```{r data} # Load in the combined data  dat <- read.csv(here::here('Data/Combined.Data.csv')) # old version  # Load in the variable data and add lags # object is called newdat in the data prep script, but haven't exported a version in a minute}
 ```
 
 ## Preliminary plots
 
-```{r ASAP.TS, echo=F, include=T}
-dat%>% 
-  dplyr::select(year,recruits,R.no.devs,logR.dev, SR.std.resid, SSB, SPR, Rs)%>%
-  reshape2::melt(id.vars="year", variable.name="series")%>%
-  ggplot(aes(year,value)) +
-  geom_line()+ 
-  theme_bw()+
-  facet_wrap(~ series, scales = "free")
+```{r ASAP.TS, echo=F, include=T} dat%>%    dplyr::select(year,recruits,R.no.devs,logR.dev, SR.std.resid, SSB, SPR, Rs)%>%   reshape2::melt(id.vars="year", variable.name="series")%>%   ggplot(aes(year,value)) +   geom_line()+    theme_bw()+   facet_wrap(~ series, scales = "free")}
 ```
 
--   Lots of fish in the "beginning" and two strong recruitment years in 67 & 71, but they did not result in large SSB, which in fact declined sharply throughout 70s, during which few strong year classes were produced. 
+```{r WHAM.TS, echo=F, include=T} ggplot(WHAM, aes(x=year, y=recrt))+   theme_bw()+     geom_line(na.rm=T, linewidth=1) +   geom_point(na.rm=T, size=1.5)+   scale_x_continuous(breaks = seq(0,2022,5),minor_breaks = seq(0,2022,1))+   xlab("Year") +   ylab("Recruitment")}
+```
 
--   SSB was low in the early 80s but started slowly recovering in the late 80s. A strong year class in 1990 perhaps contributed to the ramping up in the 90s, leading to a high value in 1993.
+## Reruns with WHAM model (mm192) and VAST zooplankton indices
 
--   Then, in 1997, SSB reached a high value that had not been observed since late 60s, and this was exactly two years after a very strong recruit year in 1995.
+-   getting a few weird results....models where NAO index 5 year lag has 100 relative influence, models where dev explained is really low (like 0.6%) (but maybe I'm calculating it wrong)
 
--   There was another strong year class in 1999 (which perhaps lead to a SSB peak in 2001), followed by a series of smaller and smaller "strong" year classes every 3-4 years in the 2000s. During this time, SSB declined through 2010.
+-   "better" models when I use logRdev as opposed to raw recruitment values
 
--   Finally, another very strong recruitment pulse occurred in 2009 and 2012, with subsequent peaks in SSB 2-3 years later in 2012 and 2014. 
+-   Underwent a series of tuning processes where I changed values like the number of trees, minobsinnode, cv folds, etc etc --\> wish Id recorded better notes on how that process went but things changed when I used depth = 2, which I think is appropriate
 
--   Since then recruitment has been very low and has not experienced the typical pulse cycles and SSB has been steadily declining.
+-   less than 10 cv folds is better
+
+-   
+
+## Stock Recruit Relationship
 
 ```{r CCF, echo=FALSE, include=T}
 
@@ -90,39 +70,26 @@ ccf(dat$SSB_1, dat$recruits, plot = T, na.action = na.pass)
 
 It appears that recruitment leads SSB by 3/4 years
 
-## Proposed Indicators (correlation)
+## Tuning Strategy
 
-```{r}
+1.  choose high learning rate (start at 0.1)
 
-```
+2.  determine optimum number of trees for this learning/shrinkage rate
 
-```{r environmental ts plots, echo = FALSE, include=T}
+3.  Fix tree hyperparameters, tune learning rate and assess speed vs. performance
 
-dat%>% 
-  dplyr::select(year, WSW, CP, HW, BT, OISST) %>%
-  reshape2::melt(id.vars="year", variable.name="series")%>%
-  ggplot(aes(year,value)) +
-  geom_line()+ 
-  theme_bw()+
-  facet_wrap(~ series, scales = "free", ncol=4)
-```
+-   Tree hyperparameters are minobsinnode and interaction depth (since I'm keeping depth to 1, only mess with minobs)
 
-```{r biological ts plots, echo = FALSE}
-dat%>% 
-  dplyr::select(year, HadSSB_GOM, HadSSB_GB, MackSSB, Jelly.Abun, Sm.cal.abun, Lg.cal.abun, Cfin.C5)%>%
-  reshape2::melt(id.vars="year", variable.name="series")%>%
-  ggplot(aes(year,value)) +
-  geom_line(size=1)+ 
-  theme_bw()+
-  facet_wrap(~ series, scales = "free", ncol=4)
-```
+-   Actually, later runs with interaction depth = 2 had much higher deviance explained
 
-```{r}
+4.  Tune tree-specific parameters (what are those...?) for decided learning rate
 
-```
+-   For learning rate of .001 at 1000 trees, optimum is 50
 
-```{r add lags }
+-   Reran with 50 as the number of trees and got what is actually a minimum value!
 
+5.  lower learning rate again to see if there is any improvement in accuracy
 
+## Learning to use new gbmt function
 
-```
+Nvm I'm sticking with just using gbm.fit/gbm...although why not use gbm.step with the new data....since I'm used to its syntax

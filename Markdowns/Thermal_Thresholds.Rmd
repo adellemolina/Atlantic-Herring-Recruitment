@@ -1,0 +1,135 @@
+---
+title: "Atlantic Herring Larvae Thermal Thresholds"
+author: "AM"
+date: "2024-11-7"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+load(file = "Thresholds.Figs.RData")
+```
+
+# Developing Temperature Indicators for Herring Larvae
+
+```{r libraries, echo=F, message=F, warning=F}
+library(sf)
+library(terra)
+library(ggplot2)
+library(dplyr)
+```
+
+Development of thermal thresholds for Atlantic herring ESP for a potential WHAM recruitment covariate
+
+First, lets take a look at the daily sea surface temperature in the area
+
+```{r plot daily climatology, echo=F, message=F, warning=F}
+OISST.EPU.Daily
+```
+
+-   Note that each point is the average of the daily mean for all pixels within the EPU area (average of an average, no spatial interpolation) in each year. The vertical black lines mark the seasonal breakpoints. The thick black line is a smoothed average climatology for each EPU.
+
+-   The red line indicates the arrhenius break point temperature (16 C as in Moyano et al 2020) for larvae, which represents thermal stress. In both GB and GoM, this primarily occurs in the summer, but there are clearly days in both fall and spring that reach that threshold.
+
+-   The purple line indicates the lethal upper limit for larvae, which only occurs for a few days in summer in recent years. \* Note that late stage larvae metamorphose into the juvenile stage in the spring and early summer and that larvae begin to appear in the GoM as early as August and September. However, the upper lethal limit of juveniles is similar to larvae
+
+## Lethal/Stressful SST
+
+Clearly there are days in both spring and fall where larvae (10-40 mm) experience stressful temperatures and a few days in the summer where lethal temperatures exist.
+
+Can we create a time series to represent how often stressful and lethal temperatures are experienced?
+
+Input data: OISST gridded daily mean temperature
+
+Spatial extent: fall survey strata
+
+```{r fall strata, echo=FALSE}
+strata.map
+```
+
+1.  Count up how many days have \>50% of the area in stressful (\> 16 C) temperatures
+2.  Count up how many days have \>50% of the area in stressful (\> 21 C) temperatures
+
+Output time series:
+
+```{r stress ts, echo=FALSE}
+stress.ts
+```
+
+```{r lethal ts, echo=FALSE}
+lethal.ts
+```
+
+-   But I had to rerun these because I used all the data and should probably just use "fall" dates (September-December) to match the strata.
+
+-   These are time series that show the number of days where daily mean OISST was \> the stressful or lethal level in 50% or more of the area
+
+-   These represents the number of days that are possibly stressful (based on 50% of the area of the strata) in your first year of life but only in fall strata on days a herring larvae might be in those strata
+
+-   In my initial runs I had used August first as the start date since that is the beginning of spawning, but the WG suggested that starting on august first doesn't really make sense b/c there is a delay from start of spawning to the time that larvae are pelagic, so I have only included both the stressful and lethal durations using fall strata and the months of september-December
+
+```{r stress days ts for Sept-Dec, echo=FALSE}
+stress.ts2
+```
+
+This shows that generally there has been a major increase in the amount of time where stressful temperatures are present --\> keep this indicator
+
+```{r lethal days ts for Sept-Dec, echo=FALSE}
+lethal.ts2
+```
+
+Meanthile most years don't have lethal SSTs in this time period, but a select few years had a few days that were lethal --\> this is not a very useful indicator, use a different approach to come up with a lethal indicator
+
+## Optimal SST
+
+-   Trying something a little different for an additional threshold indicator using September-December
+
+-   I didn't like the idea of arbitrarily choosing 50% of the area as the threshold for what is suitable. So instead I calculated the first day of the year when temperatures cool down enough to be suitable for larval survival (the area of temperatures below lethal = 0), and then also computed how long this optimal window lasts. This represents the start of suitable temperatures and the duration of suitable conditions in your first year of life but only in fall strata on days you'd be in those strata.
+
+```{r start of suitable temp ts for Sept-Dec, echo=FALSE}
+opt.start.ts
+```
+
+Lethal summer temperatures exist later into the year aka fall is starting later and summer is longer
+
+Some potential interactions here with spawning phenology, which suggests higher temperature induced mortality for those that spawn early, but the potential benefits conferred to later spawners is unclear
+
+```{r duration of suitable temp ts for Sept-Dec, echo=FALSE}
+opt.dur.ts
+```
+
+The duration of optimal fall temperatures appears to have declined over time but is also highly variable. Slight peaks in 2018 and 2010, before that 1996, 2000 & 2007
+
+## Lethal/Stressful Bottom Temperature
+
+We also wanted to explore similar types of indicators for bottom temperature conditions, which are experienced by both embryos for 1-2 weeks and then newly hatched yolk sac larvae for an additional week or so. These are the most critical stages because they are the least mobile and thus susceptible to environmental conditions. Note that for BT I did use August-December as the dates
+
+Ideas:
+
+1.  Calculate the area/proportion of bottom habitat that falls within the suitable/optimal range and its duration (how much and how long are things good on the bottom)
+
+    ```{r, echo=FALSE}
+    optBT.prop.ts
+    ```
+
+    This is the average proportion of suitable habitat in fall --\> calculated the area of suitable bottom temperatures (between 7-13) over the total area and took a mean so for each year to represent the proportion of their fall strata areas that are suitable. As you can see it's usually very high, varies a good but but no underlying trend. Also calculated the number of days where more than 75% of the area was suitable and its also very variable with no clear trend.
+
+```{r , echo=FALSE}
+optBT.days.ts
+```
+
+2.  When does optimal bottom start and how long does it persist?
+
+I'd hoped to do something similar to the optimal SST section above, but this doesn't really work because most of the bottom area from August-December is within this optimal range of 7-13
+
+## Mean SST & BT for herring specific spatial and temporal ranges
+
+Since neither of the BT temperature indicators were particularly useful, we opted to compute the average temperature at both the surface and the bottom in the fall
+
+```{r Mean herring larvae BT (aug-dec), echo=FALSE}
+MeanBT.ts
+```
+
+```{r Mean herring larvae SST (aug-dec), echo=FALSE}
+mean.SST.ts
+```

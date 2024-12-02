@@ -438,3 +438,5 @@ I also ran models with larger and even smaller datasets
     -   However, food variables are still among the top 6, and the direction of the partial dependence is the same: namely much higher Rs (log recruits/spawner) at low food abundances, which sharply declines at higher food
 
     -   The fact that this same pattern keeps appearing (paired with a short conversation about this topic with my former lab mates) suggests to me that this isn't spurious and that something is there. Perhaps more food causes more competition and predation, which could end up actually reducing the larval survival
+
+    -   Pretty sure this was happening because the all zooplankton SOE index included cnidaria as well as food items

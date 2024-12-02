@@ -2,7 +2,7 @@
 ##      Author:           Adelle Molina
 ##      Created:          4/28/23
 ##      Updated:          7/18/24
-##      Notes:            This includes step by step, sequential model runs  
+##      Notes:            This includes step by step, sequential model runs & notes on results
 
 # Packages ----------------------------------------------------------------
 library(dplyr)

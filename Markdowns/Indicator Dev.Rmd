@@ -1,0 +1,39 @@
+---
+title: "Herring ESP Indicator Development"
+author: "AM"
+date: "2024-08-07"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Proposed Indicators (correlation)
+
+```{r environmental ts plots, echo = FALSE, include=T}
+
+dat%>% 
+  dplyr::select(year, WSW, CP, HW, BT, OISST) %>%
+  reshape2::melt(id.vars="year", variable.name="series")%>%
+  ggplot(aes(year,value)) +
+  geom_line()+ 
+  theme_bw()+
+  facet_wrap(~ series, scales = "free", ncol=4)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r biological ts plots, echo = FALSE}
+dat%>% 
+  dplyr::select(year, HadSSB_GOM, HadSSB_GB, MackSSB, Jelly.Abun, Sm.cal.abun, Lg.cal.abun, Cfin.C5)%>%
+  reshape2::melt(id.vars="year", variable.name="series")%>%
+  ggplot(aes(year,value)) +
+  geom_line(size=1)+ 
+  theme_bw()+
+  facet_wrap(~ series, scales = "free", ncol=4)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

@@ -1,9 +1,9 @@
 ##      Title:            Herring Recruitment Boosted Regression Trees
 ##      Author:           Adelle Molina
 ##      Created:          4/28/23
-##      Updated:          8/19/24
-##      Notes:            This script has more recent model runs
-
+##      Updated:          12/1/24
+##      Notes:            This script has most recent model runs
+##      To Do:            Clean this up, a tiny bit more tweaking/tuning, not sure where I had left off
 # Packages ----------------------------------------------------------------
 library(dplyr)
 library(tidyr)
@@ -18,18 +18,22 @@ library(gridExtra)
 library(gbm3)
 
 # Load data ---------------------------------------------------------------
+# use data called newdat from data preparation script
 names(newdat)
 
-# Try with other gbm functions (instead of step) ---------------------------
+# Use gbmt function (from gbm3, instead of gbm.step) ---------------------------
+names(newdat)
+train_params <- training_params(num_trees = 50, interaction_depth = 2, min_num_obs_in_node = 5, shrinkage = 0.001, bag_fraction = 0.5)
+gauss_fit <- gbmt(logRdev ~ BT.GB_1+BT.GOM_1+ NAOIndex_3+OISST.GB + OISST.GOM+
+                  spring.lg + fall.sm_1 +c5fall.gom_1+ Had_1 + jelly_GB_1 + jelly_GOM_1,   
+                  data=newdat, cv_folds = 10, keep_gbm_data = TRUE, train_params = train_params, distribution = gbm_dist("Laplace"))
+summary(gauss_fit)
+best_iter_cv <- gbmt_performance(gauss_fit, method='cv')
+plot(best_iter_cv)
 
-# here using function gbmt
-train_params <- training_params(num_trees = 1000, interaction_depth = 1, min_num_obs_in_node = 5,num_features = 3)
-gauss_fit <- gbmt(recrt~BT.GB_1+BT.GOM_1+c5fall.gom_1+fall.sm_1+spring.lg+HW.GOM_1,
-                  data=newdat, cv_folds =5, keep_gbm_data = TRUE, train_params = train_params, distribution = "gaussian")
-#summary(gauss_fit)
-
-# here using function gbm.fit
-gbm2 <- gbm(logRdev~BT.GB_1+BT.GOM_1+
+# using gbm A (from gbm3) --------------------------------------
+# several runs with WHAM and VAST and a range of other vars
+gbm2 <- gbm3::gbm(logRdev~BT.GB_1+BT.GOM_1+
               OISST.GB + OISST.GOM+
               spring.lg + fall.sm_1 + HadSSB_GB+ HadSSB_GoM + HadSSB_GB_1 + HadSSB_GoM_1 + c5fall.gom_1+
               HW.GB + HW.GOM,         # formula (all columns with . otherwise type out formula)
@@ -51,9 +55,12 @@ gbm.perf(gbm2, method = "cv") # this shows loss function
 summary(gbm2)
 # "better" models when I use logRdev as opposed to raw recruitment values
 
-# how do I compute deviance explained? I think one of the two methods below works (one uses all trees the other uses just one)
-abs((last(gbm2$train.error)-last(gbm2$cv_error))/last(gbm2$train.error))*100
-(sum(gbm1$train.error)-sum(gbm1$cv_error))/sum(gbm1$train.error)*100
+# how do I compute deviance explained? 
+#I think one of the methods below works (one uses all trees the other uses just the last tree)
+#abs((last(gbm2$train.error)-last(gbm2$cv_error))/last(gbm2$train.error))*100
+#(sum(gbm2$train.error)-sum(gbm2$cv_error))/sum(gbm2$train.error)*100
+#(mean(gbm2$train.error)-mean(gbm2$cv_error))/mean(gbm2$train.error)*100
+abs(mean((gbm2$train.error-gbm2$cv_error)/gbm2$train.error))*100 # --> turned this one into a function
 
 # pretty plot of relative influence
 effects <- tibble::as_tibble(summary(gbm3))
@@ -74,34 +81,316 @@ effects %>%
   ylab('Relative Influence') +
   ggtitle("Top Drivers of Recruitment")
 
-# Play with gbm3 functions to eval model ----------------------------------
+# Using gbm B (from gbm3) with WHAM, VAST & other "smart" lags ---------------------------------------------------------------------
 
-# explore the model and other functions in the pacakge
-plot(gbm2, var_index = 5)
-#vip::vip(gbm2) 
-str(gbm2)
-#permutation_relative_influence(gbm3, num_trees = 50) # i think this is to add trees --> do if you need more iteration
+# Using new (as of 9/26) "smart" lags
+brt_smart1 <- gbm3::gbm(logR~BT.GB_1+BT.GOM_1+ NAOIndex_5+
+                    OISST.GB + OISST.GOM+
+                    spring.lg + fall.sm_1 + HadSSB_GB_1 + HadSSB_GoM_1 + c5fall.gom_1+
+                    jelly_GB_1 + jelly_GOM_1,         # formula (all columns with . otherwise type out formula)
+                  data=newdat, distribution="gaussian",     
+                  n.trees=50,                # number of trees
+                  shrinkage=0.001,             # shrinkage/learning rate, 0.001 to 0.1 usually work
+                  interaction.depth=1,         # 1: additive model, 2: two-way interactions, etc
+                  bag.fraction = 0.5,          # subsampling fraction, 0.5 is probably best
+                  train.fraction = 0.8,        # fraction of data for training, 
+                  #mFeatures = 3,               # Number of features to consider at each node.
+                  n.minobsinnode = 5,         # minimum number of obs needed in each node (10 is too high for dataset size)
+                  keep.data=TRUE,
+                  cv.folds=5,                 # do 10-fold cross-validation
+                  verbose = F) 
 
-# predict to the data, 
-gbm_pred <- predict(object = gbm2,  newdata = newdat,n.trees = 50, type="link")
-# trying to plot the fit relative to the actual data but the scales are wrong (multiply by 100 got us there even though that prob isn't right)
-ggplot(newdat, aes(x=year))+
-  geom_line(aes(y=100*gbm2$fit))+
-  geom_line(aes(y=logRdev), col="red")
+brt_smart1 # Evaluate model fit
+gbm.perf(brt_smart1, method = "cv") # this shows loss function
+summary(brt_smart1)
+dev.exp2(brt_smart1)
+# calculate deviance explained
+(sum(brt_smart1$train.error)-sum(brt_smart1$cv_error))/sum(brt_smart1$train.error)*100
+
+# Using newest (as of 10/31) "smart" lags and Micah haddock index instead of SSB
+brt_smart2 <- gbm3::gbm(logRdev~BT.GB_1+BT.GOM_1+ NAOIndex_5+OISST.GB + OISST.GOM+
+                        spring.lg + fall.sm_1 + Had_1 +jelly_GB_1 + jelly_GOM_1, 
+                        data=newdat, distribution="gaussian",     
+                        n.trees=300,  shrinkage=0.005,             
+                        interaction.depth=2,  n.minobsinnode = 5,      
+                        bag.fraction = 0.7,   cv.folds = 2, train.fraction = 0.8,      
+                        keep.data=TRUE, verbose = F) 
+gbm.perf(brt_smart2, method = "cv") 
+gbmt_performance(brt_smart2, method='test')
+summary(brt_smart2)
+brt_smart2 
+dev.exp2(brt_smart2) # this doesn't seem right it was too low now its too high....
+
+# Using gbm C (from gbm3) with WHAM, VAST, Micah, thermal indicators, strata means (DEVEL)---------------------------------------------------------------------
+# rerun with wint/fall index, one of my duration jawns and/or mean sst and bt
+names(newdat)
+# What is the best shrinkage rate? I have had it as low as 0.001, had determined previously to use 0.05, but am now using 0.01
+
+# Using newest (as of 11/18) indicator list...also switching to using logR since I don't think I did devs right
+# 11/19 added back in no lag SST
+# Run this one last time and call it a damn day ok
+herr_logR_gbm <- gbm3::gbm(logR ~  avg.fall.BT_1  + avg.fall.SST + days.optimal.SST_1 + 
+                        fall.wint.sm_1  + #NAOIndex_3 +fall.sm_1 +avg.fall.SST_1 +
+                        spring.lg +  Had_1 +jelly_GB_1 + jelly_GOM_1 +
+                        WSW + NAOIndex_5 + GSI , 
+                        data=newdat, distribution="gaussian",     
+                        n.trees=250,  shrinkage=0.01,             
+                        interaction.depth=2,  n.minobsinnode = 5,      
+                        bag.fraction = .8,   cv.folds = 10, train.fraction = 0.8,      
+                        keep.data=TRUE, verbose = F) 
+
+gbm3::gbm.perf(herr_logR_gbm, method = "cv") # plot error functions
+gbm3::gbm.perf(herr_logR_gbm, method='test')
+#gbmt_performance(herr_logR_gbm, method='OOB')
+
+# Save optimal number of trees for fitting
+opt.trees <- gbm.perf(herr_logR_gbm, method = "cv")
+opt.trees.test <- gbm.perf(herr_logR_gbm, method = "test")
+
+# Calculate mean errors and look at model
+mean(herr_logR_gbm$cv_error)
+dev.exp2(herr_logR_gbm)
+dev.exp3(herr_logR_gbm)
+print(herr_logR_gbm)
+summary(herr_logR_gbm)
+
+#sqrt(mean(herr_logR_gbm$cv_error))
+#mean(herr_logR_gbm$train.error)
+#mean(herr_logR_gbm$valid.error)
+#(abs(herr_logR_gbm$train.error-herr_logR_gbm$cv_error)/herr_logR_gbm$train.error)*100
+# Determine optimal number of trees (loop) --------------------------------
+# Write a loop to summarize error loss as trees are added once shrinkage rate has been set
+
+cv.results.n10 <- c()
+for(i in seq(100, 4000, 100)){
+  mod <- gbm3::gbm(logR ~  avg.fall.BT_1  + avg.fall.SST_1 + spring.lg + fall.sm_1 + Had_1 +jelly_GB_1 + jelly_GOM_1 +
+                  WSW + NAOIndex_3 + NAOIndex_5 + GSI , data=newdat, distribution="gaussian",     
+                  n.trees=i,  shrinkage=0.01,  interaction.depth=2,  n.minobsinnode = 5,      
+                  bag.fraction = 0.7,   cv.folds = 10, train.fraction = 0.8, keep.data=TRUE, verbose = F) 
+  fit <- data.frame(year=newdat$year, fit=mod$fit,  y=newdat$logR)
+  results <- fit%>%
+    dplyr::summarize(SSE = sum((fit - y)^2),
+                     SSE.SD=sd((fit - y)^2),
+                     RMSE = sqrt(mean(mod$cv_error)))%>% 
+    mutate(N.trees=i)  
+  cv.results.n10 <-  rbind(cv.results.n10, results)
+}
+# results for cv.folds = 10
+goal.error <- min(cv.results.n10$SSE)+mean(cv.results.n10$SSE.SD)
+ggplot(cv.results.n10, aes(x = n.trees.fix, y = SSE))+
+  geom_point()+
+  theme_bw()+ 
+  geom_errorbar(aes(ymin=SSE-SSE.SD, ymax=SSE+SSE.SD), width=.2, 
+                position=position_dodge(0.05))+
+  geom_hline(yintercept = goal.error)
+
+# results for when cv.folds = 2
+cv.results.n10$n.trees.fix <- seq(100, 4000, 100)
+ggplot(cv.results, aes(x = n.trees.fix, y = SSE))+
+  geom_point()+
+  theme_bw()+ 
+  geom_errorbar(aes(ymin=SSE-SSE.SD, ymax=SSE+SSE.SD), width=.2, 
+                position=position_dodge(0.05))+
+  geom_hline(yintercept = goal.error)
+goal.error <- min(cv.results$SSE)+mean(cv.results$SSE.SD)
+# this exercise (based in part on leathwick complexity appendix section) suggests that 800-1000 trees is best
+ #using more folds got similar result but with slightly less than 1000
+# diff ways of estimating optimal number of trees
+# but the method above suggests 120-200 is the optimal number of trees
+
+# Plot and Model Diagnostics --------------------------------------------------------------
+
+# predict back onto the data using the optimum number of trees to visualize the fit 
+Yhat <- predict(herr_logR_gbm, newdata = newdat, n.trees = opt.trees)
+Yhat.test <- predict(herr_logR_gbm, newdata = newdat, n.trees = opt.trees.test)
+fitted  <- data.frame(year=newdat$year, brt.pred=Yhat, expect = newdat$logR)
+fitted.test  <- data.frame(year=newdat$year, brt.pred=Yhat.test, expect = newdat$logR)
+#fitted  <- fitted %>%mutate(devs = abs(expect-brt.pred))
+
+print(sum((newdat$logR - Yhat)^2))# least squares error
+#gbm_roc_area(newdat$logR, Yhat) # hmmm this is always .5 even when I use diff data...does tha tmake sense its diff nrows
+
+# Plot obs vs fitted
+ggplot(fitted, aes(x=year, y=expect))+ 
+  theme_bw()+  
+  geom_line(na.rm=T, col="blue")+ #observed data
+  #geom_point(data=fitted, mapping=aes(x=year, y=brt.pred)) +
+  geom_line(aes(y=brt.pred), lwd=1) + # fitted data (all years)
+  scale_x_continuous(breaks = seq(0,2022,5),minor_breaks = seq(0,2022,1))+
+  xlab("Year") +  ylab("log Recruitment")
+# add a legend
+
+# Model fit to model data
+# Extract fit --> this is same same but diff b/c it's using final number of trees I think
+mod.fit <- data.frame(year=newdat$year, fit=herr_logR_gbm$fit,  y=newdat$logR)
+#mod.fit <- data.frame(year=newdat$year, fit=herr_logR_gbm$fit,  y=newdat$logR)
+print(sum((mod.fit$fit - mod.fit$y)^2))# least squares error of the last model
+print(sd((mod.fit$fit - mod.fit$y)^2))# least squares error 
+
+# now add in fits from the model output in red
+ggplot(fitted, aes(x=year, y=expect))+ 
+  theme_bw()+  
+  geom_line(na.rm=T, col="blue")+ #observed data
+  geom_line(aes(y=brt.pred), lwd=1) + # fit (optimal trees)
+  #geom_point(data=mod.fit, mapping=aes(x=year, y=fit), col="red") + # fit (model)
+  scale_x_continuous(breaks = seq(0,2022,5),minor_breaks = seq(0,2022,1))+
+  xlab("Year") +  ylab("log Recruitment")
+# how do I add error barss here or even a cloud...I'd have to repeat or look at residuals
+
+# Compare with short data -------------------------------------------------
+# Repeat as above but use a shortened dataset --> ope add back in the non lagged sst
+newdat.short <- newdat %>% filter(between(year,1987,2020))
+logR_gbm_short <- gbm3::gbm(logR ~  avg.fall.BT_1  + avg.fall.SST_1 +days.optimal.SST_1 + avg.fall.SST+ 
+                             spring.lg + fall.sm_1 + Had_1 +jelly_GB_1 + jelly_GOM_1 +
+                             WSW + NAOIndex_5 + GSI , 
+                           data=newdat.short, distribution="gaussian",     
+                           n.trees=250,  shrinkage=0.01,             
+                           interaction.depth=2,  n.minobsinnode = 5,      
+                           bag.fraction = .8,   cv.folds = 10, train.fraction = 0.9,      
+                           keep.data=TRUE, verbose = F) 
+
+gbm.perf(logR_gbm_short, method = "cv") 
+opt.trees.short <- gbm.perf(logR_gbm_short, method = "cv")
+
+# predict onto the full data using the optimum number of trees  
+Yhat.short <- predict(logR_gbm_short, newdata = newdat, n.trees = opt.trees.short)
+fitted.short  <- data.frame(year=newdat$year, brt.pred=Yhat.short, expect = newdat$logR)
+
+# Plot the fit to the short data and make predictions for the full data
+
+ggplot(fitted.short, aes(x=year, y=expect))+ # plot obs vs pred
+  theme_bw()+  
+  geom_line(na.rm=T, aes(color=""),lwd=1)+ #observed data
+  geom_line(aes(color=" ", y=brt.pred), lwd=1, show.legend=T) + # fitted data (short)
+  #geom_point(data=mod.fit, mapping=aes(x=year, y=fit), col="red") + # fitted data (short)
+  scale_x_continuous(breaks = seq(0,2022,5),minor_breaks = seq(0,2022,1))+
+  guides(color=guide_legend(position='inside'))+
+  scale_color_manual(labels=c("Observed", "Predicted"),
+                    values = c( "blue", "black"))+
+  theme(legend.position.inside = c(.2,.2),
+        legend.background = element_blank(),
+        legend.title = element_blank())+
+  xlab("Year") +  ylab("log Recruitment")
+ggsave("Fitted.11.18.png", width = 8, height = 6)
+
+# Other Figures & Diagnostics -----------------------------------------------------------
+
+permutation_relative_influence(herr_logR_gbm, rescale = T,  sort_it = T, num_trees = opt.trees)
+
+# pretty plot of relative influence
+ri <- summary(herr_logR_gbm)
+effects <- ri %>% 
+  dplyr::arrange(desc(rel_inf)) %>%
+  ggplot(aes(x = forcats::fct_reorder(.f = var, 
+                                      .x = rel_inf), 
+             y = rel_inf, 
+             fill = rel_inf)) +
+  geom_col() +
+  coord_flip() +
+  scale_color_brewer(palette = "Dark2") +
+  theme(axis.title = element_text()) + 
+  xlab('Variables') +
+  theme_bw()+
+  ylab('Relative Influence') +
+  ggtitle("Top Predictors of log Recruitment")
+ggsave("PartialDep_11.18.png", width = 8, height = 6)
+
+# calibration plot...whatever that is
+calibrate_plot(newdat$logR, Yhat, "Gaussian")
+
+# Explore interactions
+interact(herr_logR_gbm, newdat, var_indices=c(1,5), opt.trees)
+# is there a way to only plot particular interactions....like how do we choose the ones that had high var importance....oh reorder
+# can I write a loop to find any sig interactions
+for(i in 1:nrow(ri)){
+  pdp<-plot(herr_logR_gbm,c(i,),return_grid = T)
+  pdp$var<-rep(colnames(pdp)[1],nrow(pdp))
+  pdp$ri<-rep(ri$rel_inf[which(row.names(ri)==colnames(pdp)[1])],nrow(pdp))
+  colnames(pdp)<-c("val","y","var","ri")
+  x<-rbind(x,pdp)
+}
+
+# Plot Partial Dependence for chosen model --------------------------------
+# Figure out syntax
+plot(herr_logR_gbm, var_index=c(1)) # can do one at a time...but they're in order of the model input
+plot(herr_logR_gbm, var_index=c(4,6)) # can also do two at a time, which shows an interesting grid type figure...
+#plot(herr_logR_gbm, var_index=c(1,2,3))#if you do three at a time you get a grid of grids
+
+# Loop to plot only the top 6 variables, maybe make it more like 8?
+ri <- summary(herr_logR_gbm)
+x<-c()
+for(i in 1:nrow(ri)){
+  pdp<-plot(herr_logR_gbm,i,return_grid = T)
+  pdp$var<-rep(colnames(pdp)[1],nrow(pdp))
+  pdp$ri<-rep(ri$rel_inf[which(row.names(ri)==colnames(pdp)[1])],nrow(pdp))
+  colnames(pdp)<-c("val","y","var","ri")
+  x<-rbind(x,pdp)
+}
+
+# order by relative influence
+x$var<-factor(x$var,levels=row.names(ri))
+
+# top 6
+top6<-as.character(ri$var[1:6])
+relinf<-round(ri$rel_inf[1:6],1)
+
+x%>%
+  filter(var==top6[1])%>%
+  ggplot(aes(x=val,y=y))+
+  geom_smooth(method="loess",se=T,color="darkgray")+
+  theme_bw()+
+  labs(x=paste(top6[1],"(",relinf[1],"%)",sep=""),y="Marginal effect")+
+  theme(panel.grid.minor=element_blank(),axis.text=element_text(size=12))->p1
+
+x%>%
+  filter(var==top6[2])%>%
+  ggplot(aes(x=val,y=y))+
+  geom_smooth(method="loess",se=T,color="darkgray")+
+  labs(x=paste(top6[2],"(",relinf[2],"%)",sep=""),y="")+
+  theme_bw()+
+  theme(panel.grid.minor=element_blank(),axis.text=element_text(size=12))->p2
+
+x%>%
+  filter(var==top6[3])%>%
+  ggplot(aes(x=val,y=y))+
+  geom_smooth(method="loess",se=T,color="darkgray")+
+  labs(x=paste(top6[3],"(",relinf[3],"%)",sep=""),y="")+
+  theme_bw()+
+  theme(panel.grid.minor=element_blank(),axis.text=element_text(size=12))->p3
+x%>%
+  filter(var==top6[4])%>%
+  ggplot(aes(x=val,y=y))+
+  geom_smooth(method="loess",se=T,color="darkgray")+
+  labs(x=paste(top6[4],"(",relinf[4],"%)",sep=""),y="Marginal effect ")+
+  theme_bw()+
+  theme(panel.grid.minor=element_blank(),axis.text=element_text(size=12))->p4
+
+x%>%
+  filter(var==top6[5])%>%
+  ggplot(aes(x=val,y=y))+
+  geom_smooth(method="loess",se=T,color="darkgray")+
+  labs(x=paste(top6[5],"(",relinf[5],"%)",sep=""),y="")+
+  theme_bw()+
+  theme(panel.grid.minor=element_blank(),axis.text=element_text(size=12))->p5
+
+x%>%
+  filter(var==top6[6])%>%
+  ggplot(aes(x=val,y=y))+
+  geom_smooth(method="loess",se=T,color="darkgray")+
+  labs(x=paste(top6[6],"(",relinf[6],"%)",sep=""),y="")+
+  theme_bw()+
+  theme(panel.grid.minor=element_blank(),axis.text=element_text(size=12))->p6
+pdpz <- gridExtra::grid.arrange(p1,p2,p3,p4,p5,p6,ncol=3)
+ggsave("PartialDep_11.18.png", width = 8, height = 6)
 
 
-best.iter <- gbm.perf(gbm2, method = "cv")
+tiff("Figures/ts.Competitors.tiff", width = 8, height = 5, units = 'in', res = 300)
+ggarrange(p1,p2,p3,p4,p5,p6,ncol=3)
+dev.off()
 
-Yhat <- predict(gbm2, newdata = newdat, n.trees = best.iter, type = "link")
-print(sum((newdat$logRdev - Yhat)^2))# least squares error
-
-# plot marginal effectfor one variable at a time
-plot(gbm3)
-
-
-
-# GBM3 without correlated vars --------------------------------------------
+# Using gbm A2(from gbm3) with reduced dataset --------------------------------------------
 # added gbm4 with interaction depth set to 2....
+# this is where I had previously left off and was playing around and tuning 
 
 # Try with correlated variables removed
 gbm4 <- gbm(logRdev~BT.GB_1+BT.GOM_1+ OISST.GB + OISST.GOM+
@@ -117,22 +406,19 @@ gbm4 <- gbm(logRdev~BT.GB_1+BT.GOM_1+ OISST.GB + OISST.GOM+
             keep.data=TRUE,
             cv.folds=10,                 
             verbose = F) 
-gbm.perf(gbm4, method = "cv") # this shows loss function
+gbm.perf(gbm4, method = "cv") # this shows loss function, but clearly haven't gotten to that point of max error loss
 sqrt((gbm4$train.error[1]-gbm4$cv_error[1])/gbm4$train.error[1])
 hist(newdat$logRdev)
 sqrt(gbm4$cv_error[1])
 sqrt(gbm4$train.error[1])
 gbm4 # Evaluate model fit (lower pseudo R than gbm2)
-gbm.perf(gbm4, method = "cv") # this shows loss function
 summary(gbm4)
-abs((last(gbm3$train.error)-last(gbm3$cv_error))/last(gbm3$train.error))*100 # very low fake dev explained
+abs((last(gbm4$train.error)-last(gbm4$cv_error))/last(gbm4$train.error))*100 # very low fake dev explained, very high for model with interaction depth 2
 
-# Plot that
+# Plot relative influence
 effects_gbm4 <- tibble::as_tibble(summary(gbm4))
 effects_plot <- effects_gbm4 %>% 
-  # arrange descending to get the top influencers
   dplyr::arrange(desc(rel_inf)) %>%
-  # plot these data using columns
   ggplot(aes(x = forcats::fct_reorder(.f = var, 
                                       .x = rel_inf), 
              y = rel_inf, 
@@ -157,13 +443,69 @@ BRT.mm192_opt <-gbm.step(data=newdat,
                          family="gaussian", tree.complexity=1, # (1 = no interactions)
                          learning.rate=0.0001, bag.fraction=0.5, n.trees = 1000, n.folds = 10) # doesn't run? 
 
-# BRT with WHAM output and Sarah zoo indices ------------------------------
+# Play with gbm3 functions to eval model ----------------------------------
+
+# explore the model and other functions in the pacakge
+plot(gbm2, var_index = 6)
+
+# predict to the data, 
+gbm_pred <- predict(object = gbm2,  newdata = newdat,n.trees = 50, type="link")
+# trying to plot the fit relative to the actual data but the scales are wrong
+#(multiply by 100 got us there even though that prob isn't right)
+ggplot(newdat, aes(x=year))+
+  geom_line(aes(y=100*gbm2$fit))+
+  geom_line(aes(y=logRdev), col="red")
+
+best.iter <- gbm.perf(gbm2, method = "cv")
+
+Yhat <- predict(gbm2, newdata = newdat, n.trees = best.iter, type = "link")
+print(sum((newdat$logRdev - Yhat)^2))# least squares error
+
+# plot marginal effectfor one variable at a time
+plot(gbm3)
+
+# BRT with WHAM and VAST (gbm.step) ------------------------------
+BRT.mm192_step <-gbm.step(data=newdat,gbm.x=c(5:ncol(newdat)),  gbm.y=3, # mm192 recruits (log)
+                           family="gaussian", tree.complexity=1,
+                          learning.rate=0.001, bag.fraction=0.8, train.fraction = 0.8, n.minobsinnode=5, step.size = 1) 
+
+dev.exp(BRT.mm192_smart) #
+# error that dataset is too small or subsampling rate is too large
+# other error to restart model with a smaller learning rate or smaller step size...
+
+
+# ok so these dismo gbm.step models just are not working at all...
+BRT.mm192_smart <-gbm.step(data=newdat,
+                         gbm.x=c(5:ncol(newdat)), 
+                         gbm.y=3, # mm192 recruits (log)
+                         family="gaussian", tree.complexity=2, # (1 = no interactions)
+                         learning.rate=0.00001, bag.fraction=0.5) 
+
+dev.exp(BRT.mm192_smart) #
+names(newdat)
+effects <- tibble::as_tibble(summary(BRT.mm192_smart))
+effects %>% 
+  dplyr::arrange(desc(rel.inf)) %>%
+  ggplot(aes(x = forcats::fct_reorder(.f = var, 
+                                      .x = rel.inf), 
+             y = rel.inf, 
+             fill = rel.inf)) +
+  geom_col() +
+  coord_flip() +
+  scale_color_brewer(palette = "Dark2") +
+  xlab('Features') +
+  theme_bw()+
+  ylab('Relative Influence') 
+
+
+# "older"
 BRT.mm192_raw <-gbm.step(data=newdat,
                          gbm.x=c(5:ncol(newdat)), 
                          gbm.y=2, # mm192 recruits
                          family="gaussian", tree.complexity=1, # (1 = no interactions)
                          learning.rate=0.05, bag.fraction=0.7)
 dev.exp(BRT.mm192_raw)
+
 
 BRT.mm192 <-gbm.step(data=newdat,
                           gbm.x=c(5:ncol(newdat)), 
@@ -179,11 +521,10 @@ BRT.mm192_bio <-gbm.step(data=newdat,
                      family="gaussian", tree.complexity=1, # (1 = no interactions)
                      learning.rate=0.000005, bag.fraction=0.8)
 
-
 #(((BRT.mm192_raw$self.statistics$mean.null)-(BRT.mm192_raw$cv.statistics$deviance.mean))/(BRT.mm192_bio$self.statistics$mean.null))*100 
 (1.114876e+13 -1.08101e+13)/1.114876e+13 # very low calculated deviance explained for this model
 
-# BRT for log recruitment deviations ---------
+# BRT for log recruitment deviations ASAP (gbm.step) ---------
 names(combined.dat)
 ncol(combined.dat)
 summary(BRT.mm192_raw)
@@ -264,7 +605,6 @@ ggplot(data=ri,aes(x=reorder(var,rel.inf),y=rel.inf))+
   coord_flip()+
   theme_bw()
 dev.off()
-
 
 # Partial Dependence Plots ---------------------------------------------------------------
 # For the model with highest deviance explained --> BRT.ldev_2
